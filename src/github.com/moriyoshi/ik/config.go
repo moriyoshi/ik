@@ -22,6 +22,9 @@ type ConfigElement struct {
 	Elems []*ConfigElement
 }
 
+type Configurable interface {
+}
+
 type LineReader interface {
 	Next() (string, error)
 	Close() error

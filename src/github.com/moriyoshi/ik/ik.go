@@ -1,90 +1,82 @@
 package ik
 
-import (
-	"errors"
-	"log"
-	"net"
-	"reflect"
-	//	"encoding/hex"
-	"github.com/ugorji/go/codec"
-)
-
-type Client struct {
-	logger *log.Logger
-	conn   net.Conn
-	codec  *codec.MsgpackHandle
-	enc    *codec.Encoder
-	dec    *codec.Decoder
-}
+import "log"
 
 type FluentRecord struct {
-	tag       string
-	timestamp uint64
-	data      map[string]interface{}
+	Tag       string
+	Timestamp uint64
+	Data      map[string]interface{}
 }
 
-func (c *Client) decodeEntry() (FluentRecord, error) {
-	v := []interface{}{nil, nil, nil}
-	err := c.dec.Decode(&v)
-	if err != nil {
-		return FluentRecord{}, err
-	}
-	tag, ok := v[0].(string)
-	if !ok {
-		return FluentRecord{}, errors.New("Failed to decode tag field")
-	}
-	timestamp, ok := v[1].(uint64)
-	if !ok {
-		return FluentRecord{}, errors.New("Failed to decode timestamp field")
-	}
-	data, ok := v[2].(map[string]interface{})
-	if !ok {
-		return FluentRecord{}, errors.New("Failed to decode data field")
-	}
-	return FluentRecord{tag: tag, timestamp: timestamp, data: data}, nil
+type Port interface {
+    Emit(record FluentRecord) error
 }
 
-func (c *Client) handle() {
-	entry, err := c.decodeEntry()
-	if err != nil {
-		c.logger.Fatal(err.Error())
-		return
-	}
-	c.logger.Printf("tag=%s, timestamp=%d, data=%s\n", entry.tag, entry.timestamp, entry.data)
+type Input interface {
+    Factory() InputFactory
+    Port() Port
+    Start() error
+    Shutdown() error
 }
 
-func newClient(logger *log.Logger, conn net.Conn, _codec *codec.MsgpackHandle) *Client {
-	return &Client{
-		logger: logger,
-		conn:   conn,
-		codec:  _codec,
-		enc:    codec.NewEncoder(conn, _codec),
-		dec:    codec.NewDecoder(conn, _codec),
-	}
+type Output interface {
+    Port
+    Factory() OutputFactory
 }
 
-func Server(logger *log.Logger, bind string) error {
-	_codec := codec.MsgpackHandle{}
-	_codec.MapType = reflect.TypeOf(map[string]interface{}(nil))
-	_codec.RawToString = true
-	if bind == "" {
-		bind = ":24224"
-	}
-	ss, err := net.Listen("tcp", bind)
-	if err != nil {
-		logger.Fatal(err.Error())
-		return err
-	}
-	for {
-		cs, err := ss.Accept()
-		if err != nil {
-			logger.Fatal(err.Error())
-			continue
-		}
-		go newClient(logger, cs, &_codec).handle()
+type MarkupAttributes int
 
-	}
-	return nil
+const (
+    Embolden = 0x10000
+    Underlined = 0x20000
+)
+
+type MarkupChunk struct {
+    Attrs MarkupAttributes
+    Text string
 }
 
-// vim: sts=4 sw=4 ts=4 noet
+type Markup struct {
+    Chunks []MarkupChunk
+}
+
+type ScoreValue interface {
+    AsPlainText() string
+    AsMarkup() Markup
+}
+
+type Plugin interface {
+    Name() string
+}
+
+type ScoreKeeper interface {
+    Bind(engine Engine)
+    AddTopic(plugin Plugin, name string)
+    Emit(plugin Plugin, name string, data ScoreValue)
+}
+
+type Engine interface {
+    Logger() *log.Logger
+    ScoreKeeper() ScoreKeeper
+    DefaultPort() Port
+}
+
+type InputFactory interface {
+    Name() string
+    New(engine Engine, attrs map[string]string) (Input, error)
+}
+
+type InputFactoryRegistry interface {
+    RegisterInputFactory(factory InputFactory) error
+    LookupInputFactory(name string) InputFactory
+}
+
+type OutputFactory interface {
+    Name() string
+    New(engine Engine, attrs map[string]string) (Output, error)
+}
+
+type OutputFactoryRegistry interface {
+    RegisterOutputFactory(factory OutputFactory) error
+    LookupOutputFactory(name string) OutputFactory
+}
