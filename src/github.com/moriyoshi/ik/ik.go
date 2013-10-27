@@ -9,7 +9,7 @@ type FluentRecord struct {
 }
 
 type Port interface {
-    Emit(record FluentRecord) error
+    Emit(record []FluentRecord) error
 }
 
 type Input interface {
