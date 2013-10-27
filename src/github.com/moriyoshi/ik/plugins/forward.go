@@ -106,8 +106,8 @@ func (c *forwardClient) handle() {
         if err == io.EOF {
             break
         } else if err != nil {
-            c.logger.Fatal(err.Error())
-            return
+            c.logger.Println(err.Error())
+            continue
         }
         c.input.Port().Emit(entries)
     }
