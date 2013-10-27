@@ -11,8 +11,8 @@ import (
 	"github.com/ugorji/go/codec"
 )
 
-type streamClient struct {
-    input *StreamInput
+type forwardClient struct {
+    input *ForwardInput
 	logger *log.Logger
 	conn   net.Conn
 	codec  *codec.MsgpackHandle
@@ -20,21 +20,21 @@ type streamClient struct {
 	dec    *codec.Decoder
 }
 
-type StreamInput struct {
-    factory *StreamInputFactory
+type ForwardInput struct {
+    factory *ForwardInputFactory
     port ik.Port
     logger *log.Logger
     bind string
     listener net.Listener
     codec *codec.MsgpackHandle
     running bool
-    clients map[net.Conn]*streamClient
+    clients map[net.Conn]*forwardClient
 }
 
-type StreamInputFactory struct {
+type ForwardInputFactory struct {
 }
 
-func (c *streamClient) decodeEntry() (ik.FluentRecord, error) {
+func (c *forwardClient) decodeEntry() (ik.FluentRecord, error) {
 	v := []interface{}{nil, nil, nil}
 	err := c.dec.Decode(&v)
 	if err != nil {
@@ -55,7 +55,7 @@ func (c *streamClient) decodeEntry() (ik.FluentRecord, error) {
 	return ik.FluentRecord{Tag: tag, Timestamp: timestamp, Data: data}, nil
 }
 
-func (c *streamClient) handle() {
+func (c *forwardClient) handle() {
     for {
         entry, err := c.decodeEntry()
         if err == io.EOF {
@@ -70,8 +70,8 @@ func (c *streamClient) handle() {
     c.input.markDischarged(c)
 }
 
-func newStreamClient(input *StreamInput, logger *log.Logger, conn net.Conn, _codec *codec.MsgpackHandle) *streamClient {
-	c := &streamClient{
+func newForwardClient(input *ForwardInput, logger *log.Logger, conn net.Conn, _codec *codec.MsgpackHandle) *forwardClient {
+	c := &forwardClient{
         input: input,
 		logger: logger,
 		conn:   conn,
@@ -83,15 +83,15 @@ func newStreamClient(input *StreamInput, logger *log.Logger, conn net.Conn, _cod
     return c
 }
 
-func (input *StreamInput) Factory() ik.InputFactory {
+func (input *ForwardInput) Factory() ik.InputFactory {
     return input.factory
 }
 
-func (input *StreamInput) Port() ik.Port {
+func (input *ForwardInput) Port() ik.Port {
     return input.port
 }
 
-func (input *StreamInput) Start() error {
+func (input *ForwardInput) Start() error {
     input.running = true // XXX: RACE
     go func () {
         for input.running {
@@ -100,13 +100,13 @@ func (input *StreamInput) Start() error {
                 input.logger.Fatal(err.Error())
                 continue
             }
-            go newStreamClient(input, input.logger, conn, input.codec).handle()
+            go newForwardClient(input, input.logger, conn, input.codec).handle()
         }
     }()
 	return nil
 }
 
-func (input *StreamInput) Shutdown() error {
+func (input *ForwardInput) Shutdown() error {
     input.running = false
     for conn, _ := range input.clients {
         conn.Close()
@@ -114,15 +114,15 @@ func (input *StreamInput) Shutdown() error {
     return input.listener.Close()
 }
 
-func (input *StreamInput) markCharged(c *streamClient) {
+func (input *ForwardInput) markCharged(c *forwardClient) {
     input.clients[c.conn] = c
 }
 
-func (input *StreamInput) markDischarged(c *streamClient) {
+func (input *ForwardInput) markDischarged(c *forwardClient) {
     delete(input.clients, c.conn)
 }
 
-func newStreamInput(factory *StreamInputFactory, logger *log.Logger, bind string, port ik.Port) (*StreamInput, error) {
+func newForwardInput(factory *ForwardInputFactory, logger *log.Logger, bind string, port ik.Port) (*ForwardInput, error) {
 	_codec := codec.MsgpackHandle{}
 	_codec.MapType = reflect.TypeOf(map[string]interface{}(nil))
 	_codec.RawToString = true
@@ -131,7 +131,7 @@ func newStreamInput(factory *StreamInputFactory, logger *log.Logger, bind string
 		logger.Fatal(err.Error())
 		return nil, err
 	}
-    return &StreamInput {
+    return &ForwardInput {
         factory: factory,
         port: port,
         logger: logger,
@@ -139,25 +139,25 @@ func newStreamInput(factory *StreamInputFactory, logger *log.Logger, bind string
         listener: listener,
         codec: &_codec,
         running: false,
-        clients: make(map[net.Conn]*streamClient),
+        clients: make(map[net.Conn]*forwardClient),
     }, nil
 }
 
-func (factory *StreamInputFactory) Name() string {
+func (factory *ForwardInputFactory) Name() string {
     return "forward"
 }
 
-func (factory *StreamInputFactory) New(engine ik.Engine, attrs map[string]string) (ik.Input, error) {
+func (factory *ForwardInputFactory) New(engine ik.Engine, attrs map[string]string) (ik.Input, error) {
     listen, ok := attrs["listen"]
     if !ok { listen = "" }
     netPort, ok := attrs["port"]
     if !ok { netPort = "24224" }
     bind := listen + ":" + netPort
-    return newStreamInput(factory, engine.Logger(), bind, engine.DefaultPort())
+    return newForwardInput(factory, engine.Logger(), bind, engine.DefaultPort())
 }
 
-var singleton = StreamInputFactory {}
+var singleton = ForwardInputFactory {}
 
-func GetStreamInputFactory() *StreamInputFactory {
+func GetForwardInputFactory() *ForwardInputFactory {
     return &singleton
 }

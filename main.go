@@ -11,7 +11,7 @@ func main() {
 	logger := log.New(os.Stdout, "[ik] ", log.Lmicroseconds)
 	scoreKeeper := ik.NewScoreKeeper()
 	engine := ik.NewEngine(logger, scoreKeeper)
-	engine.RegisterInputFactory(plugins.GetStreamInputFactory())
+	engine.RegisterInputFactory(plugins.GetForwardInputFactory())
 	inputFactory := engine.LookupInputFactory("forward")
 	if inputFactory == nil {
 		return
