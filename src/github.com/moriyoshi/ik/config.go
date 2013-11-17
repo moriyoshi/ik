@@ -18,6 +18,7 @@ type Config struct {
 
 type ConfigElement struct {
 	Name  string
+	Args  string
 	Attrs map[string]string
 	Elems []*ConfigElement
 }
@@ -118,9 +119,6 @@ func (opener DefaultOpener) NewOpener(path_ string) Opener {
 }
 
 func (opener DefaultOpener) NewLineReader(filename string) (LineReader, error) {
-	if !path.IsAbs(filename) {
-		filename = path.Join(string(opener), filename)
-	}
 	file, err := opener.FileSystem().Open(filename)
 	if err != nil {
 		return nil, err
@@ -145,6 +143,7 @@ func makeParserContext(tag string, tagArgs string, opener Opener) *parserContext
 func makeConfigElementFromContext(context *parserContext) *ConfigElement {
 	return &ConfigElement{
 		Name:  context.tag,
+		Args:  context.tagArgs,
 		Attrs: context.attrs,
 		Elems: context.elems,
 	}
