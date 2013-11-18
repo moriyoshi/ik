@@ -10,6 +10,7 @@ type FluentRecord struct {
 
 type Port interface {
     Emit(record []FluentRecord) error
+    RegisterOutput(output Output)
 }
 
 type Input interface {
@@ -20,7 +21,7 @@ type Input interface {
 }
 
 type Output interface {
-    Port
+    Emit(record []FluentRecord) error
     Factory() OutputFactory
 }
 
