@@ -1,4 +1,6 @@
 .Python
+*.swp
+*.swo
 pkg/
 env/
 src/github.com/ugorji
