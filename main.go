@@ -33,6 +33,7 @@ func main() {
 	engine := ik.NewEngine(logger, scoreKeeper)
 	engine.RegisterInputFactory(plugins.GetForwardInputFactory())
 	engine.RegisterOutputFactory(plugins.GetStdoutOutputFactory())
+	engine.RegisterOutputFactory(plugins.GetForwardOutputFactory())
 
 	var input ik.Input
 	var err error
@@ -67,7 +68,7 @@ func main() {
 				return
 			}
 			engine.DefaultPort().RegisterOutput(output)
-			logger.Printf("Onput plugin loaded: %s, with Args '%s'", v.Name, v.Args)
+			logger.Printf("Output plugin loaded: %s, with Args '%s'", v.Name, v.Args)
 		}
 	}
 
