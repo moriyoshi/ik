@@ -87,6 +87,15 @@ func (output *ForwardOutput) Factory() ik.OutputFactory {
 	return output.factory
 }
 
+func (output *ForwardOutput) Run() error {
+	time.Sleep(1000000000)
+	return ik.Continue
+}
+
+func (output *ForwardOutput) Shutdown() error {
+	return nil
+}
+
 type ForwardOutputFactory struct {
 }
 

@@ -30,10 +30,13 @@ func main() {
 	}
 
 	scoreKeeper := ik.NewScoreKeeper()
-	engine := ik.NewEngine(logger, scoreKeeper)
+	router := ik.NewFluentRouter()
+	engine := ik.NewEngine(logger, scoreKeeper, router)
 	engine.RegisterInputFactory(plugins.GetForwardInputFactory())
 	engine.RegisterOutputFactory(plugins.GetStdoutOutputFactory())
 	engine.RegisterOutputFactory(plugins.GetForwardOutputFactory())
+
+	engine.SetDefaultPort(router)
 
 	spawner := ik.NewSpawner()
 
@@ -68,6 +71,7 @@ func main() {
 		case "match":
 			outputFactory := engine.LookupOutputFactory(v.Attrs["type"])
 			output, err := outputFactory.New(engine, v.Attrs)
+			router.AddRule(v.Args, output)
 			if err != nil {
 				logger.Fatal(err.Error())
 				return
@@ -75,7 +79,7 @@ func main() {
 			spawnees = append(spawnees, input)
 			spawner.Spawn(output)
 			logger.Printf("Onput plugin loaded: %s, with Args '%s'", v.Name, v.Args)
-		}
+        }
 	}
 
 	spawner.PollMultiple(spawnees)

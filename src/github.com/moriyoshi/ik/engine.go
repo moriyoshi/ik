@@ -58,13 +58,17 @@ func (engine *engineImpl) DefaultPort() Port {
     return engine.defaultPort
 }
 
-func NewEngine(logger *log.Logger, scorekeeper ScoreKeeper) *engineImpl {
+func (engine *engineImpl) SetDefaultPort(port Port) {
+	engine.defaultPort = port
+}
+
+func NewEngine(logger *log.Logger, scorekeeper ScoreKeeper, defaultPort Port) *engineImpl {
     engine := &engineImpl {
         logger: logger,
         scorekeeper: scorekeeper,
         inputFactories: make(map[string]InputFactory),
         outputFactories: make(map[string]OutputFactory),
-        defaultPort: newDemoPort(logger),
+        defaultPort: defaultPort,
     }
     scorekeeper.Bind(engine)
     return engine
