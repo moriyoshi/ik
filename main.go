@@ -33,6 +33,7 @@ func main() {
 	engine := ik.NewEngine(logger, scoreKeeper)
 	engine.RegisterInputFactory(plugins.GetForwardInputFactory())
 	engine.RegisterOutputFactory(plugins.GetStdoutOutputFactory())
+	engine.RegisterOutputFactory(plugins.GetForwardOutputFactory())
 
 	spawner := ik.NewSpawner()
 
