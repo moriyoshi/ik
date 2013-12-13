@@ -5,7 +5,7 @@ import (
 )
 
 type fluentRouterRule struct {
-	re *regexp.Regexp
+	re   *regexp.Regexp
 	port Port
 }
 
@@ -44,7 +44,7 @@ func buildRegexpFromGlobPatternInner(pattern string, startPos int) (string, int,
 						return "", 0, err
 					}
 					if lastPos == patternLength {
-						return "", 0, &PatternError { "unexpected end of pattern (in expectation of '}' or ',')" }
+						return "", 0, &PatternError{"unexpected end of pattern (in expectation of '}' or ',')"}
 					}
 					if !first {
 						chunk += "|"
@@ -55,7 +55,7 @@ func buildRegexpFromGlobPatternInner(pattern string, startPos int) (string, int,
 					if pattern[lastPos] == '}' {
 						break
 					} else if pattern[lastPos] != ',' {
-						return "", 0, &PatternError { "never get here" }
+						return "", 0, &PatternError{"never get here"}
 					}
 				}
 				chunk += ")"
@@ -79,7 +79,7 @@ func buildRegexpFromGlobPatternInner(pattern string, startPos int) (string, int,
 			// recursive any
 			c := pattern[i]
 			if c == '*' {
-				return "", 0, &PatternError { "unexpected *" }
+				return "", 0, &PatternError{"unexpected *"}
 			} else if c == '.' {
 				chunk += "(?:.*\\.|^)"
 			} else {
@@ -91,7 +91,7 @@ func buildRegexpFromGlobPatternInner(pattern string, startPos int) (string, int,
 	if state == 2 {
 		chunk += "[^.]*"
 	} else if state == 3 {
-		chunk += ".*" 
+		chunk += ".*"
 	}
 	return chunk, i, nil
 }
@@ -102,7 +102,7 @@ func BuildRegexpFromGlobPattern(pattern string) (string, error) {
 		return "", err
 	}
 	if pos != len(pattern) {
-		return "", &PatternError { "unexpected '" + string(pattern[pos]) + "'" }
+		return "", &PatternError{"unexpected '" + string(pattern[pos]) + "'"}
 	}
 	return "^" + chunk + "$", nil
 }
@@ -116,7 +116,7 @@ func (router *FluentRouter) AddRule(pattern string, port Port) error {
 	if err != nil {
 		return err
 	}
-	newRule := &fluentRouterRule { re, port }
+	newRule := &fluentRouterRule{re, port}
 	router.rules = append(router.rules, newRule)
 	return nil
 }
@@ -144,5 +144,5 @@ func (router *FluentRouter) Emit(records []FluentRecord) error {
 }
 
 func NewFluentRouter() *FluentRouter {
-	return &FluentRouter { make([]*fluentRouterRule, 0) }
+	return &FluentRouter{make([]*fluentRouterRule, 0)}
 }

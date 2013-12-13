@@ -1,22 +1,22 @@
 package plugins
 
 import (
-	"net"
-	"log"
-	"reflect"
 	"bytes"
-	"time"
-	"strconv"
 	"github.com/moriyoshi/ik"
 	"github.com/ugorji/go/codec"
+	"log"
+	"net"
+	"reflect"
+	"strconv"
+	"time"
 )
 
 type ForwardOutput struct {
 	factory *ForwardOutputFactory
 	logger  *log.Logger
-	codec  *codec.MsgpackHandle
-	bind   string
-	enc    *codec.Encoder
+	codec   *codec.MsgpackHandle
+	bind    string
+	enc     *codec.Encoder
 	conn    net.Conn
 	buffer  bytes.Buffer
 }
@@ -43,7 +43,7 @@ func (output *ForwardOutput) flush() error {
 			output.conn = conn
 		}
 	}
-	
+
 	n, err := output.buffer.WriteTo(output.conn)
 	if err != nil {
 		output.logger.Printf("Write failed. size: %d, buf size: %d, error: %#v", n, output.buffer.Len(), err.Error())
@@ -63,7 +63,7 @@ func (output *ForwardOutput) run_flush(flush_interval int) {
 	go func() {
 		for {
 			select {
-			case <- ticker.C:
+			case <-ticker.C:
 				output.flush()
 			}
 		}
@@ -74,9 +74,9 @@ func (output *ForwardOutput) Emit(record []ik.FluentRecord) error {
 	for _, record := range record {
 		//output.logger.Printf("%d %s: %s\n", record.Timestamp, record.Tag, record.Data)
 		err := output.encodeEntry(record)
-		if err != nil { 
+		if err != nil {
 			output.logger.Printf("%#v", err)
-			return err 
+			return err
 		}
 		//output.logger.Printf("Buffer size: %d\n", output.buffer.Len())
 	}
@@ -118,11 +118,17 @@ func (factory *ForwardOutputFactory) Name() string {
 func (factory *ForwardOutputFactory) New(engine ik.Engine, attrs map[string]string) (ik.Output, error) {
 	//engine.Logger().Printf("%#v\n", attrs)
 	host, ok := attrs["host"]
-	if !ok { host = "localhost" }
+	if !ok {
+		host = "localhost"
+	}
 	netPort, ok := attrs["port"]
-	if !ok { netPort = "24224" }
+	if !ok {
+		netPort = "24224"
+	}
 	flush_interval_str, ok := attrs["flush_interval"]
-	if !ok { flush_interval_str = "60" }
+	if !ok {
+		flush_interval_str = "60"
+	}
 	flush_interval, err := strconv.Atoi(flush_interval_str)
 	if err != nil {
 		engine.Logger().Fatal(err.Error())
