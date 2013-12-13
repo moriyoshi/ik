@@ -35,6 +35,7 @@ func main() {
 	engine.RegisterInputFactory(plugins.GetForwardInputFactory())
 	engine.RegisterOutputFactory(plugins.GetStdoutOutputFactory())
 	engine.RegisterOutputFactory(plugins.GetForwardOutputFactory())
+	engine.RegisterOutputFactory(plugins.GetFileOutputFactory())
 
 	engine.SetDefaultPort(router)
 

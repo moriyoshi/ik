@@ -33,6 +33,19 @@ type ForwardInput struct {
 type ForwardInputFactory struct {
 }
 
+func coerceInPlace(data map[string]interface{}) {
+	for k, v := range data {
+		switch v_ := v.(type) {
+		case []byte:
+			data[k] = string(v_) // XXX: byte => rune
+		case map[string]interface{}:
+			coerceInPlace(v_)
+		default:
+			println(v_)
+		}
+	}
+}
+
 func decodeTinyEntries(tag []byte, entries []interface{}) ([]ik.FluentRecord, error) {
 	retval := make([]ik.FluentRecord, len(entries))
 	for i, _entry := range entries {
@@ -45,8 +58,9 @@ func decodeTinyEntries(tag []byte, entries []interface{}) ([]ik.FluentRecord, er
 		if !ok {
 			return nil, errors.New("Failed to decode data field")
 		}
+		coerceInPlace(data)
 		retval[i] = ik.FluentRecord{
-			Tag:       string(tag),
+			Tag:       string(tag), // XXX: byte => rune
 			Timestamp: timestamp,
 			Data:      data,
 		}
@@ -73,9 +87,10 @@ func (c *forwardClient) decodeEntries() ([]ik.FluentRecord, error) {
 		if !ok {
 			return nil, errors.New("Failed to decode data field")
 		}
+		coerceInPlace(data)
 		retval = []ik.FluentRecord{
 			{
-				Tag:       string(tag),
+				Tag:       string(tag), // XXX: byte => rune
 				Timestamp: timestamp,
 				Data:      data,
 			},
@@ -88,7 +103,7 @@ func (c *forwardClient) decodeEntries() ([]ik.FluentRecord, error) {
 		}
 		retval = []ik.FluentRecord{
 			{
-				Tag:       string(tag),
+				Tag:       string(tag), // XXX: byte => rune
 				Timestamp: timestamp,
 				Data:      data,
 			},
