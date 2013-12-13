@@ -16,13 +16,14 @@ func main() {
 	if inputFactory == nil {
 		return
 	}
+	spawner := ik.NewSpawner()
 	input, err := inputFactory.New(engine, map[string]string { "port": "24224" })
 	if err != nil {
 		println(err.Error())
 		return
 	}
-	input.Start()
-	<-make(chan int)
+	spawner.Spawn(input)
+	spawner.PollMultiple([]ik.Spawnee { input })
 }
 
 // vim: sts=4 sw=4 ts=4 noet

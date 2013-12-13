@@ -12,15 +12,20 @@ type Port interface {
     Emit(record []FluentRecord) error
 }
 
+type Spawnee interface {
+    Run() error
+    Shutdown() error
+}
+
 type Input interface {
+    Spawnee
     Factory() InputFactory
     Port() Port
-    Start() error
-    Shutdown() error
 }
 
 type Output interface {
     Port
+    Spawnee
     Factory() OutputFactory
 }
 

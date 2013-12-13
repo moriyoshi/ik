@@ -1,13 +1,12 @@
 package plugins
 
 import (
-    "io"
+	"io"
 	"errors"
 	"log"
 	"net"
-    "fmt"
+	"fmt"
 	"reflect"
-	//	"encoding/hex"
 	"github.com/moriyoshi/ik"
 	"github.com/ugorji/go/codec"
 )
@@ -28,7 +27,6 @@ type ForwardInput struct {
     bind string
     listener net.Listener
     codec *codec.MsgpackHandle
-    running bool
     clients map[net.Conn]*forwardClient
 }
 
@@ -71,6 +69,19 @@ func (c *forwardClient) decodeEntries() ([]ik.FluentRecord, error) {
     switch timestamp_or_entries := v[1].(type) {
     case uint64:
         timestamp := timestamp_or_entries
+        data, ok := v[2].(map[string]interface{})
+        if !ok {
+            return nil, errors.New("Failed to decode data field")
+        }
+        retval = []ik.FluentRecord {
+            {
+                Tag: string(tag),
+                Timestamp: timestamp,
+                Data: data,
+            },
+        }
+    case float64:
+        timestamp := uint64(timestamp_or_entries)
         data, ok := v[2].(map[string]interface{})
         if !ok {
             return nil, errors.New("Failed to decode data field")
@@ -136,23 +147,17 @@ func (input *ForwardInput) Port() ik.Port {
     return input.port
 }
 
-func (input *ForwardInput) Start() error {
-    input.running = true // XXX: RACE
-    go func () {
-        for input.running {
-            conn, err := input.listener.Accept()
-            if err != nil {
-                input.logger.Fatal(err.Error())
-                continue
-            }
-            go newForwardClient(input, input.logger, conn, input.codec).handle()
-        }
-    }()
-	return nil
+func (input *ForwardInput) Run() error {
+	conn, err := input.listener.Accept()
+	if err != nil {
+		input.logger.Fatal(err.Error())
+		return err
+	}
+	go newForwardClient(input, input.logger, conn, input.codec).handle()
+	return ik.Continue
 }
 
 func (input *ForwardInput) Shutdown() error {
-    input.running = false
     for conn, _ := range input.clients {
         conn.Close()
     }
@@ -176,16 +181,15 @@ func newForwardInput(factory *ForwardInputFactory, logger *log.Logger, bind stri
 		logger.Fatal(err.Error())
 		return nil, err
 	}
-    return &ForwardInput {
-        factory: factory,
-        port: port,
-        logger: logger,
-        bind: bind,
-        listener: listener,
-        codec: &_codec,
-        running: false,
-        clients: make(map[net.Conn]*forwardClient),
-    }, nil
+	return &ForwardInput {
+		factory: factory,
+		port: port,
+		logger: logger,
+		bind: bind,
+		listener: listener,
+		codec: &_codec,
+		clients: make(map[net.Conn]*forwardClient),
+	}, nil
 }
 
 func (factory *ForwardInputFactory) Name() string {
