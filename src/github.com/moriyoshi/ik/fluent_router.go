@@ -123,14 +123,21 @@ func (router *FluentRouter) AddRule(pattern string, port Port) error {
 
 func (router *FluentRouter) Emit(records []FluentRecord) error {
 	recordMap := make(map[Port][]FluentRecord)
-	for _, record := range records {
+	numRecords := len(records)
+	for i := 0; i < numRecords; i += 1 {
+		record := &records[i]
 		for _, rule := range router.rules {
 			if rule.re.MatchString(record.Tag) {
 				recordsForPort, ok := recordMap[rule.port]
 				if !ok {
 					recordsForPort = make([]FluentRecord, 0)
+				} else {
+					lastRecord := &recordsForPort[len(recordsForPort) - 1]
+					if &lastRecord.Data == &record.Data {
+						continue
+					}
 				}
-				recordMap[rule.port] = append(recordsForPort, record)
+				recordMap[rule.port] = append(recordsForPort, *record)
 			}
 		}
 	}
