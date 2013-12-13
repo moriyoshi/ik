@@ -78,7 +78,7 @@ func main() {
 			}
 			spawnees = append(spawnees, input)
 			spawner.Spawn(output)
-			logger.Printf("Onput plugin loaded: %s, with Args '%s'", v.Name, v.Args)
+			logger.Printf("Output plugin loaded: %s, with Args '%s'", v.Name, v.Args)
         }
 	}
 
