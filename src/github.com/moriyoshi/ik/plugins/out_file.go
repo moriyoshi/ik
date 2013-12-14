@@ -128,7 +128,10 @@ func newFileOutput(factory *FileOutputFactory, logger *log.Logger, path string, 
 		}
 	}
 	if symlinkPath != "" {
-		os.Symlink(symlinkPath, path)
+		err := os.Symlink(symlinkPath, path)
+		if err == nil {
+			logger.Fatal("Failed to create symbolic link " + symlinkPath)
+		}
 	}
 	return &FileOutput {
 		factory: factory,
