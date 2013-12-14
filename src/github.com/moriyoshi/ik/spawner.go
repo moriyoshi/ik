@@ -164,15 +164,15 @@ func (spawner *Spawner) spawn(spawnee Spawnee, retval chan dispatchReturnValue) 
 
 func (spawner *Spawner) kill(spawnee Spawnee, retval chan dispatchReturnValue) {
 	spawner.mtx.Lock()
-	defer spawner.mtx.Unlock()
 	descriptor, ok := spawner.m[spawnee]
+	spawner.mtx.Unlock()
 	if ok && descriptor.exitStatus != Continue {
 		descriptor.shutdownRequested = true
 		err := spawnee.Shutdown()
 		retval <- dispatchReturnValue{true, nil, nil, err}
-		return
+	} else {
+		retval <- dispatchReturnValue{false, nil, nil, nil}
 	}
-	retval <- dispatchReturnValue{false, nil, nil, nil}
 }
 
 func (spawner *Spawner) getStatus(spawnee Spawnee, retval chan dispatchReturnValue) {

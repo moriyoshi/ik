@@ -8,12 +8,59 @@ import (
 	"log"
 	"os"
 	"path"
+	"errors"
 )
 
 func usage() {
 	fmt.Fprintf(os.Stderr, "Usage of %s:\n", os.Args[0])
 	flag.PrintDefaults()
 	os.Exit(0)
+}
+
+type InputOutputFactoryRegistry struct {
+	inputFactories  map[string]ik.InputFactory
+	outputFactories map[string]ik.OutputFactory
+}
+
+func (registry *InputOutputFactoryRegistry) RegisterInputFactory(factory ik.InputFactory) error {
+	_, alreadyExists := registry.inputFactories[factory.Name()]
+	if alreadyExists {
+		return errors.New(fmt.Sprintf("InputFactory named %s already registered", factory.Name()))
+	}
+	registry.inputFactories[factory.Name()] = factory
+	return nil
+}
+
+func (registry *InputOutputFactoryRegistry) LookupInputFactory(name string) ik.InputFactory {
+	factory, ok := registry.inputFactories[name]
+	if !ok {
+		return nil
+	}
+	return factory
+}
+
+func (registry *InputOutputFactoryRegistry) RegisterOutputFactory(factory ik.OutputFactory) error {
+	_, alreadyExists := registry.outputFactories[factory.Name()]
+	if alreadyExists {
+		return errors.New(fmt.Sprintf("OutputFactory named %s already registered", factory.Name()))
+	}
+	registry.outputFactories[factory.Name()] = factory
+	return nil
+}
+
+func (registry *InputOutputFactoryRegistry) LookupOutputFactory(name string) ik.OutputFactory {
+	factory, ok := registry.outputFactories[name]
+	if !ok {
+		return nil
+	}
+	return factory
+}
+
+func NewInputOutputFactoryRegistry() *InputOutputFactoryRegistry {
+	return &InputOutputFactoryRegistry {
+		inputFactories:  make(map[string]ik.InputFactory),
+		outputFactories: make(map[string]ik.OutputFactory),
+	}
 }
 
 func main() {
@@ -29,22 +76,6 @@ func main() {
 		usage()
 	}
 
-	scoreKeeper := ik.NewScoreKeeper()
-	router := ik.NewFluentRouter()
-	engine := ik.NewEngine(logger, scoreKeeper, router)
-	for _, _plugin := range plugins.GetPlugins() {
-		switch plugin := _plugin.(type) {
-		case ik.InputFactory:
-			engine.RegisterInputFactory(plugin)
-		case ik.OutputFactory:
-			engine.RegisterOutputFactory(plugin)
-		}
-	}
-	spawner := ik.NewSpawner()
-
-	var input ik.Input
-	var err error
-
 	dir, file := path.Split(config_file)
 	opener := ik.DefaultOpener(dir)
 	config, err := ik.ParseConfig(opener, file)
@@ -53,38 +84,29 @@ func main() {
 		return
 	}
 
-	spawnees := make([]ik.Spawnee, 0)
-	for _, v := range config.Root.Elems {
-		switch v.Name {
-		case "source":
-			inputFactory := engine.LookupInputFactory(v.Attrs["type"])
-			delete(v.Attrs, "type")
-			if inputFactory == nil {
-				return
-			}
-			input, err = inputFactory.New(engine, v.Attrs)
-			if err != nil {
-				logger.Fatal(err.Error())
-				return
-			}
-			spawnees = append(spawnees, input)
-			spawner.Spawn(input)
-			logger.Printf("Input plugin loaded: ", inputFactory.Name())
-		case "match":
-			outputFactory := engine.LookupOutputFactory(v.Attrs["type"])
-			output, err := outputFactory.New(engine, v.Attrs)
-			router.AddRule(v.Args, output)
-			if err != nil {
-				logger.Fatal(err.Error())
-				return
-			}
-			spawnees = append(spawnees, input)
-			spawner.Spawn(output)
-			logger.Printf("Output plugin loaded: %s, with Args '%s'", v.Name, v.Args)
-        }
+	registry := NewInputOutputFactoryRegistry()
+
+	for _, _plugin := range plugins.GetPlugins() {
+		switch plugin := _plugin.(type) {
+		case ik.InputFactory:
+			registry.RegisterInputFactory(plugin)
+		case ik.OutputFactory:
+			registry.RegisterOutputFactory(plugin)
+		}
 	}
 
-	spawner.PollMultiple(spawnees)
+	scorekeeper := ik.NewScoreKeeper()
+	defer scorekeeper.Dispose()
+	router := ik.NewFluentRouter()
+	engine := ik.NewEngine(logger, scorekeeper, router)
+	defer engine.Dispose()
+
+	err = ik.NewFluentConfigurer(logger, registry, registry, router).Configure(engine, config)
+	if err != nil {
+		println(err.Error())
+		return
+	}
+	engine.Start()
 }
 
 // vim: sts=4 sw=4 ts=4 noet

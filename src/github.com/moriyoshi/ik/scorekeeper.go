@@ -50,6 +50,8 @@ func (sk *scorekeeperImpl) Bind(engine Engine) {
 	sk.logger = engine.Logger()
 }
 
+func (sk *scorekeeperImpl) Dispose() {}
+
 func NewScoreKeeper() ScoreKeeper {
 	return &scorekeeperImpl{
 		logger: nil,

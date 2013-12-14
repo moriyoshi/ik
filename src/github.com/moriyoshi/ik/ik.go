@@ -50,25 +50,32 @@ type ScoreValue interface {
 	AsMarkup() Markup
 }
 
+type Disposable interface {
+	Dispose()
+}
+
 type Plugin interface {
 	Name() string
 }
 
 type ScoreKeeper interface {
+	Disposable
 	Bind(engine Engine)
 	AddTopic(plugin Plugin, name string)
 	Emit(plugin Plugin, name string, data ScoreValue)
 }
 
 type Engine interface {
+	Disposable
 	Logger() *log.Logger
 	ScoreKeeper() ScoreKeeper
 	DefaultPort() Port
+	Spawn(Spawnee) error
 }
 
 type InputFactory interface {
 	Name() string
-	New(engine Engine, attrs map[string]string) (Input, error)
+	New(engine Engine, config *ConfigElement) (Input, error)
 }
 
 type InputFactoryRegistry interface {
@@ -78,10 +85,11 @@ type InputFactoryRegistry interface {
 
 type OutputFactory interface {
 	Name() string
-	New(engine Engine, attrs map[string]string) (Output, error)
+	New(engine Engine, config *ConfigElement) (Output, error)
 }
 
 type OutputFactoryRegistry interface {
 	RegisterOutputFactory(factory OutputFactory) error
 	LookupOutputFactory(name string) OutputFactory
 }
+

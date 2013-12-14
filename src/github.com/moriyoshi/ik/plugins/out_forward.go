@@ -115,17 +115,16 @@ func (factory *ForwardOutputFactory) Name() string {
 	return "forward"
 }
 
-func (factory *ForwardOutputFactory) New(engine ik.Engine, attrs map[string]string) (ik.Output, error) {
-	//engine.Logger().Printf("%#v\n", attrs)
-	host, ok := attrs["host"]
+func (factory *ForwardOutputFactory) New(engine ik.Engine, config *ik.ConfigElement) (ik.Output, error) {
+	host, ok := config.Attrs["host"]
 	if !ok {
 		host = "localhost"
 	}
-	netPort, ok := attrs["port"]
+	netPort, ok := config.Attrs["port"]
 	if !ok {
 		netPort = "24224"
 	}
-	flush_interval_str, ok := attrs["flush_interval"]
+	flush_interval_str, ok := config.Attrs["flush_interval"]
 	if !ok {
 		flush_interval_str = "60"
 	}

@@ -96,6 +96,10 @@ func (output *FileOutput) Shutdown() error {
 	return output.closer()
 }
 
+func (output *FileOutput) Dispose() {
+	output.Shutdown()
+}
+
 func newFileOutput(factory *FileOutputFactory, logger *log.Logger, path string, timeFormat string, compressionFormat int, symlinkPath string, permission os.FileMode) (*FileOutput, error) {
 	var out FlushableWriter
 	var closer func() error
@@ -149,15 +153,15 @@ func (factory *FileOutputFactory) Name() string {
 	return "file"
 }
 
-func (factory *FileOutputFactory) New(engine ik.Engine, attrs map[string]string) (ik.Output, error) {
+func (factory *FileOutputFactory) New(engine ik.Engine, config *ik.ConfigElement) (ik.Output, error) {
 	path := ""
 	timeFormat := ""
 	compressionFormat := compressionNone
 	symlinkPath := ""
 	permission := 0666
-	path, _ = attrs["path"]
-	timeFormat, _ = attrs["time_format"]
-	compressionFormatStr, ok := attrs["compress"]
+	path, _ = config.Attrs["path"]
+	timeFormat, _ = config.Attrs["time_format"]
+	compressionFormatStr, ok := config.Attrs["compress"]
 	if ok {
 		if compressionFormatStr == "gz" || compressionFormatStr == "gzip" {
 			compressionFormat = compressionGzip
@@ -165,8 +169,8 @@ func (factory *FileOutputFactory) New(engine ik.Engine, attrs map[string]string)
 			return nil, errors.New("unknown compression format: " + compressionFormatStr)
 		}
 	}
-	symlinkPath, _ = attrs["symlink_path"]
-	permissionStr, ok := attrs["permission"]
+	symlinkPath, _ = config.Attrs["symlink_path"]
+	permissionStr, ok := config.Attrs["permission"]
 	if ok {
 		var err error
 		permission, err = strconv.Atoi(permissionStr)

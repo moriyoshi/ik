@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"path"
+	"log"
 	"regexp"
 	"strings"
 )
@@ -21,9 +22,6 @@ type ConfigElement struct {
 	Args  string
 	Attrs map[string]string
 	Elems []*ConfigElement
-}
-
-type Configurable interface {
 }
 
 type LineReader interface {
@@ -248,4 +246,59 @@ func ParseConfig(opener Opener, filename string) (*Config, error) {
 		return nil, err
 	}
 	return &Config{Root: makeConfigElementFromContext(context)}, nil
+}
+
+type FluentConfigurer struct {
+	logger *log.Logger
+	router *FluentRouter
+	inputFactoryRegistry InputFactoryRegistry
+	outputFactoryRegistry OutputFactoryRegistry
+}
+
+func (configurer *FluentConfigurer) Configure(engine Engine, config *Config) error {
+       for _, v := range config.Root.Elems {
+	       switch v.Name {
+		case "source":
+			type_ := v.Attrs["type"]
+			inputFactory := configurer.inputFactoryRegistry.LookupInputFactory(type_)
+			if inputFactory == nil {
+				return errors.New("Could not find input factory: " + type_)
+			}
+			input, err := inputFactory.New(engine, v)
+			if err != nil {
+				return err
+			}
+			err = engine.Spawn(input)
+			if err != nil {
+				return err
+			}
+			configurer.logger.Printf("Input plugin loaded: %s", inputFactory.Name())
+		case "match":
+			type_ := v.Attrs["type"]
+			outputFactory := configurer.outputFactoryRegistry.LookupOutputFactory(type_)
+			if outputFactory == nil {
+				return errors.New("Could not find output factory: " + type_)
+			}
+			output, err := outputFactory.New(engine, v)
+			if err != nil {
+				return err
+			}
+			configurer.router.AddRule(v.Args, output)
+			err = engine.Spawn(output)
+			if err != nil {
+				return err
+			}
+			configurer.logger.Printf("Output plugin loaded: %s, with Args '%s'", outputFactory.Name(), v.Args)
+		}
+	}
+	return nil
+}
+
+func NewFluentConfigurer(logger *log.Logger, inputFactoryRegistry InputFactoryRegistry, outputFactoryRegistry OutputFactoryRegistry, router *FluentRouter) *FluentConfigurer {
+	return &FluentConfigurer {
+		logger: logger,
+		router: router,
+		inputFactoryRegistry: inputFactoryRegistry,
+		outputFactoryRegistry: outputFactoryRegistry,
+	}
 }

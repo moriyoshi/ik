@@ -183,6 +183,10 @@ func (input *ForwardInput) Shutdown() error {
 	return input.listener.Close()
 }
 
+func (input *ForwardInput) Dispose() {
+	input.Shutdown()
+}
+
 func (input *ForwardInput) markCharged(c *forwardClient) {
 	input.clients[c.conn] = c
 }
@@ -215,12 +219,12 @@ func (factory *ForwardInputFactory) Name() string {
 	return "forward"
 }
 
-func (factory *ForwardInputFactory) New(engine ik.Engine, attrs map[string]string) (ik.Input, error) {
-	listen, ok := attrs["listen"]
+func (factory *ForwardInputFactory) New(engine ik.Engine, config *ik.ConfigElement) (ik.Input, error) {
+	listen, ok := config.Attrs["listen"]
 	if !ok {
 		listen = ""
 	}
-	netPort, ok := attrs["port"]
+	netPort, ok := config.Attrs["port"]
 	if !ok {
 		netPort = "24224"
 	}

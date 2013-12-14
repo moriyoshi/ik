@@ -33,6 +33,10 @@ func (output *StdoutOutput) Shutdown() error {
 	return nil
 }
 
+func (output *StdoutOutput) Dispose() {
+	output.Shutdown()
+}
+
 type StdoutOutputFactory struct {
 }
 
@@ -47,7 +51,7 @@ func (factory *StdoutOutputFactory) Name() string {
 	return "stdout"
 }
 
-func (factory *StdoutOutputFactory) New(engine ik.Engine, attrs map[string]string) (ik.Output, error) {
+func (factory *StdoutOutputFactory) New(engine ik.Engine, _ *ik.ConfigElement) (ik.Output, error) {
 	return newStdoutOutput(factory, engine.Logger())
 }
 
