@@ -40,8 +40,6 @@ func coerceInPlace(data map[string]interface{}) {
 			data[k] = string(v_) // XXX: byte => rune
 		case map[string]interface{}:
 			coerceInPlace(v_)
-		default:
-			println(v_)
 		}
 	}
 }
