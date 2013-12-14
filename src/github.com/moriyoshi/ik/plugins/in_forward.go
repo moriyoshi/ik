@@ -1,9 +1,9 @@
 package plugins
 
 import (
+	"github.com/moriyoshi/ik"
 	"errors"
 	"fmt"
-	"github.com/moriyoshi/ik"
 	"github.com/ugorji/go/codec"
 	"io"
 	"log"
@@ -230,8 +230,4 @@ func (factory *ForwardInputFactory) New(engine ik.Engine, attrs map[string]strin
 	return newForwardInput(factory, engine.Logger(), bind, engine.DefaultPort())
 }
 
-var singleton = ForwardInputFactory{}
-
-func GetForwardInputFactory() *ForwardInputFactory {
-	return &singleton
-}
+var _ = AddPlugin(&ForwardInputFactory{})

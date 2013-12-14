@@ -1,8 +1,8 @@
 package plugins
 
 import (
-	"bytes"
 	"github.com/moriyoshi/ik"
+	"bytes"
 	"github.com/ugorji/go/codec"
 	"log"
 	"net"
@@ -139,8 +139,4 @@ func (factory *ForwardOutputFactory) New(engine ik.Engine, attrs map[string]stri
 	return output, err
 }
 
-var singleton_forwardoutputfactory = ForwardOutputFactory{}
-
-func GetForwardOutputFactory() *ForwardOutputFactory {
-	return &singleton_forwardoutputfactory
-}
+var _ = AddPlugin(&ForwardOutputFactory{})

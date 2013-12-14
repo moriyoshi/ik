@@ -32,13 +32,14 @@ func main() {
 	scoreKeeper := ik.NewScoreKeeper()
 	router := ik.NewFluentRouter()
 	engine := ik.NewEngine(logger, scoreKeeper, router)
-	engine.RegisterInputFactory(plugins.GetForwardInputFactory())
-	engine.RegisterOutputFactory(plugins.GetStdoutOutputFactory())
-	engine.RegisterOutputFactory(plugins.GetForwardOutputFactory())
-	engine.RegisterOutputFactory(plugins.GetFileOutputFactory())
-
-	engine.SetDefaultPort(router)
-
+	for _, _plugin := range plugins.GetPlugins() {
+		switch plugin := _plugin.(type) {
+		case ik.InputFactory:
+			engine.RegisterInputFactory(plugin)
+		case ik.OutputFactory:
+			engine.RegisterOutputFactory(plugin)
+		}
+	}
 	spawner := ik.NewSpawner()
 
 	var input ik.Input

@@ -1,8 +1,8 @@
 package plugins
 
 import (
-	"fmt"
 	"github.com/moriyoshi/ik"
+	"fmt"
 	"log"
 	"os"
 	"time"
@@ -51,8 +51,4 @@ func (factory *StdoutOutputFactory) New(engine ik.Engine, attrs map[string]strin
 	return newStdoutOutput(factory, engine.Logger())
 }
 
-var singleton2 = StdoutOutputFactory{}
-
-func GetStdoutOutputFactory() *StdoutOutputFactory {
-	return &singleton2
-}
+var _ = AddPlugin(&StdoutOutputFactory{})

@@ -176,8 +176,4 @@ func (factory *FileOutputFactory) New(engine ik.Engine, attrs map[string]string)
 	)
 }
 
-var singleton3 = FileOutputFactory{}
-
-func GetFileOutputFactory() *FileOutputFactory {
-	return &singleton3
-}
+var _ = AddPlugin(&FileOutputFactory{})
