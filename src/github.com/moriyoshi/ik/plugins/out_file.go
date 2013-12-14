@@ -12,6 +12,7 @@ import (
 	"time"
 	"errors"
 	"encoding/json"
+	strftime "github.com/jehiah/go-strftime"
 )
 
 type FlushableWriter interface {
@@ -39,7 +40,12 @@ const (
 )
 
 func (output *FileOutput) formatTime(timestamp uint64) string {
-	return time.Unix(int64(timestamp), 0).Format(time.RFC3339)
+	timestamp_ := time.Unix(int64(timestamp), 0)
+	if output.timeFormat == "" {
+		return timestamp_.Format(time.RFC3339)
+	} else {
+		return strftime.Format(output.timeFormat, timestamp_)
+	}
 }
 
 func (output *FileOutput) formatData(data map[string]interface{}) (string, error) {
