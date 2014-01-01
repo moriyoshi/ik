@@ -9,7 +9,7 @@ Installation
 ------------
 
 ```shell
-$ go install github.com/moriyoshi/ik/entrypoints/ik
+$ go get github.com/moriyoshi/ik/entrypoints/ik
 ```
 
 Authors
