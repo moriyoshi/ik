@@ -105,7 +105,7 @@ func newFileOutput(factory *FileOutputFactory, logger *log.Logger, path string, 
 	var closer func() error
 	fout, err := os.OpenFile(path, os.O_RDWR | os.O_CREATE | os.O_APPEND, permission)
 	if err != nil {
-		logger.Fatal("Failed to open " + path)
+		logger.Print("Failed to open " + path)
 		return nil, err
 	}
 	if compressionFormat == compressionGzip {
@@ -116,7 +116,7 @@ func newFileOutput(factory *FileOutputFactory, logger *log.Logger, path string, 
 			err2 := fout.Close()
 			if err2 != nil {
 				if err1 != nil {
-					logger.Fatal("ignored error: " + err1.Error())
+					logger.Print("ignored error: " + err1.Error())
 				}
 				return err2
 			}
@@ -134,7 +134,7 @@ func newFileOutput(factory *FileOutputFactory, logger *log.Logger, path string, 
 	if symlinkPath != "" {
 		err := os.Symlink(symlinkPath, path)
 		if err == nil {
-			logger.Fatal("Failed to create symbolic link " + symlinkPath)
+			logger.Print("Failed to create symbolic link " + symlinkPath)
 		}
 	}
 	return &FileOutput {

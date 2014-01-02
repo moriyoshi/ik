@@ -284,7 +284,7 @@ func newHTMLHTTPScoreboard(factory *HTMLHTTPScoreboardFactory, logger *log.Logge
 			},
 		}).Parse(mainTemplate)
 	if err != nil {
-		logger.Fatal(err.Error())
+		logger.Print(err.Error())
 		return nil, err
 	}
 	server := http.Server {
@@ -298,7 +298,7 @@ func newHTMLHTTPScoreboard(factory *HTMLHTTPScoreboardFactory, logger *log.Logge
 	}
 	listener, err := net.Listen("tcp", bind)
 	if err != nil {
-		logger.Fatal(err.Error())
+		logger.Print(err.Error())
 		return nil, err
 	}
 	retval := &HTMLHTTPScoreboard {

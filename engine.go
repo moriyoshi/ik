@@ -30,7 +30,7 @@ func (engine *engineImpl) DefaultPort() Port {
 func (engine *engineImpl) Dispose() {
 	spawnees, err := engine.spawner.GetRunningSpawnees()
 	if err != nil {
-		engine.logger.Fatal(err.Error())
+		engine.logger.Print(err.Error())
 	} else {
 		for _, spawnee := range spawnees {
 			engine.spawner.Kill(spawnee)

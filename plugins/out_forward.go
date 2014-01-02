@@ -130,7 +130,8 @@ func (factory *ForwardOutputFactory) New(engine ik.Engine, config *ik.ConfigElem
 	}
 	flush_interval, err := strconv.Atoi(flush_interval_str)
 	if err != nil {
-		engine.Logger().Fatal(err.Error())
+		engine.Logger().Print(err.Error())
+		return nil, err
 	}
 	bind := host + ":" + netPort
 	output, err := newForwardOutput(factory, engine.Logger(), bind)
