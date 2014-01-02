@@ -9,6 +9,8 @@ import (
 	"log"
 	"net"
 	"reflect"
+	"strconv"
+	"sync/atomic"
 )
 
 type forwardClient struct {
@@ -28,6 +30,15 @@ type ForwardInput struct {
 	listener net.Listener
 	codec    *codec.MsgpackHandle
 	clients  map[net.Conn]*forwardClient
+	entries  int64
+}
+
+type EntryCountTopic struct {
+	input *ForwardInput
+}
+
+type ConnectionCountTopic struct {
+	input *ForwardInput
 }
 
 type ForwardInputFactory struct {
@@ -127,21 +138,34 @@ func (c *forwardClient) decodeEntries() ([]ik.FluentRecord, error) {
 	default:
 		return nil, errors.New(fmt.Sprintf("Unknown type: %t", timestamp_or_entries))
 	}
+	atomic.AddInt64(&c.input.entries, int64(len(retval)))
 	return retval, nil
 }
 
 func (c *forwardClient) handle() {
 	for {
 		entries, err := c.decodeEntries()
-		if err == io.EOF {
+		if err != nil {
+			err_, ok := err.(net.Error)
+			if ok {
+				if err_.Temporary() {
+					c.logger.Println("Temporary failure: %s", err_.Error())
+					continue
+				}
+			}
+			if err == io.EOF {
+				c.logger.Printf("Client %s closed the connection", c.conn.RemoteAddr().String())
+			} else {
+				c.logger.Print(err.Error())
+			}
 			break
-		} else if err != nil {
-			c.logger.Println(err.Error())
-			continue
 		}
 		c.input.Port().Emit(entries)
 	}
-	c.conn.Close()
+	err := c.conn.Close()
+	if err != nil {
+		c.logger.Print(err.Error())
+	}
 	c.input.markDischarged(c)
 }
 
@@ -169,7 +193,7 @@ func (input *ForwardInput) Port() ik.Port {
 func (input *ForwardInput) Run() error {
 	conn, err := input.listener.Accept()
 	if err != nil {
-		input.logger.Fatal(err.Error())
+		input.logger.Print(err.Error())
 		return err
 	}
 	go newForwardClient(input, input.logger, conn, input.codec).handle()
@@ -198,16 +222,16 @@ func (input *ForwardInput) markDischarged(c *forwardClient) {
 	delete(input.clients, c.conn)
 }
 
-func newForwardInput(factory *ForwardInputFactory, logger *log.Logger, bind string, port ik.Port) (*ForwardInput, error) {
+func newForwardInput(factory *ForwardInputFactory, logger *log.Logger, engine ik.Engine, bind string, port ik.Port) (*ForwardInput, error) {
 	_codec := codec.MsgpackHandle{}
 	_codec.MapType = reflect.TypeOf(map[string]interface{}(nil))
 	_codec.RawToString = false
 	listener, err := net.Listen("tcp", bind)
 	if err != nil {
-		logger.Fatal(err.Error())
+		logger.Print(err.Error())
 		return nil, err
 	}
-	return &ForwardInput{
+	retval := &ForwardInput{
 		factory:  factory,
 		port:     port,
 		logger:   logger,
@@ -215,7 +239,23 @@ func newForwardInput(factory *ForwardInputFactory, logger *log.Logger, bind stri
 		listener: listener,
 		codec:    &_codec,
 		clients:  make(map[net.Conn]*forwardClient),
-	}, nil
+		entries:  0,
+	}
+	engine.Scorekeeper().AddTopic(ik.ScorekeeperTopic {
+		Plugin: factory,
+		Name: "entries",
+		DisplayName: "Total number of entries",
+		Description: "Total number of entries received so far",
+		Fetcher: &EntryCountTopic { retval },
+	})
+	engine.Scorekeeper().AddTopic(ik.ScorekeeperTopic {
+		Plugin: factory,
+		Name: "connections",
+		DisplayName: "Connections",
+		Description: "Number of connections currently handled",
+		Fetcher: &ConnectionCountTopic { retval },
+	})
+	return retval, nil
 }
 
 func (factory *ForwardInputFactory) Name() string {
@@ -232,7 +272,31 @@ func (factory *ForwardInputFactory) New(engine ik.Engine, config *ik.ConfigEleme
 		netPort = "24224"
 	}
 	bind := listen + ":" + netPort
-	return newForwardInput(factory, engine.Logger(), bind, engine.DefaultPort())
+	return newForwardInput(factory, engine.Logger(), engine, bind, engine.DefaultPort())
+}
+
+func (topic *EntryCountTopic) Markup() (ik.Markup, error) {
+	text, err := topic.PlainText()
+	if err != nil {
+		return ik.Markup {}, err
+	}
+	return ik.Markup { []ik.MarkupChunk { { Text: text } } }, nil
+}
+
+func (topic *EntryCountTopic) PlainText() (string, error) {
+	return strconv.FormatInt(topic.input.entries, 10), nil
+}
+
+func (topic *ConnectionCountTopic) Markup() (ik.Markup, error) {
+	text, err := topic.PlainText()
+	if err != nil {
+		return ik.Markup {}, err
+	}
+	return ik.Markup { []ik.MarkupChunk { { Text: text } } }, nil
+}
+
+func (topic *ConnectionCountTopic) PlainText() (string, error) {
+	return strconv.Itoa(len(topic.input.clients)), nil // XXX: race
 }
 
 var _ = AddPlugin(&ForwardInputFactory{})
