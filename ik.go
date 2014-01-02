@@ -45,9 +45,9 @@ type Markup struct {
 	Chunks []MarkupChunk
 }
 
-type ScoreValue interface {
-	AsPlainText() string
-	AsMarkup() Markup
+type ScoreValueFetcher interface {
+	PlainText() (string, error)
+	Markup() (Markup, error)
 }
 
 type Disposable interface {
@@ -58,19 +58,21 @@ type Plugin interface {
 	Name() string
 }
 
-type ScoreKeeper interface {
-	Disposable
-	Bind(engine Engine)
-	AddTopic(plugin Plugin, name string)
-	Emit(plugin Plugin, name string, data ScoreValue)
+type ScorekeeperTopic struct {
+	Plugin Plugin
+	Name string
+	DisplayName string
+	Description string
+	Fetcher ScoreValueFetcher
 }
 
 type Engine interface {
 	Disposable
 	Logger() *log.Logger
-	ScoreKeeper() ScoreKeeper
+	Scorekeeper() *Scorekeeper
 	DefaultPort() Port
 	Spawn(Spawnee) error
+	SpawneeStatuses() ([]SpawneeStatus, error)
 }
 
 type InputFactory interface {
@@ -93,3 +95,16 @@ type OutputFactoryRegistry interface {
 	LookupOutputFactory(name string) OutputFactory
 }
 
+type PluginRegistry interface {
+	Plugins() []Plugin
+}
+
+type Scoreboard interface {
+	Spawnee
+	Factory() ScoreboardFactory
+}
+
+type ScoreboardFactory interface {
+	Name() string
+	New(engine Engine, pluginRegistry PluginRegistry, config *ConfigElement) (Scoreboard, error)
+}

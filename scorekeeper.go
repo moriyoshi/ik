@@ -2,60 +2,70 @@ package ik
 
 import (
 	"log"
+	"fmt"
+	"errors"
 )
 
-type topicEntry struct {
-	plugin Plugin
-	name   string
-}
-
-type scorekeeperImpl struct {
+type Scorekeeper struct {
 	logger *log.Logger
 	engine Engine
-	topics map[Plugin]map[string]topicEntry
+	topics map[Plugin]map[string]ScorekeeperTopic
 }
 
-func (sk *scorekeeperImpl) AddTopic(plugin Plugin, name string) {
-	sk.logger.Printf("AddTopic: plugin=%s, name=%s", plugin.Name(), name)
+func (sk *Scorekeeper) GetPlugins() []Plugin {
+	plugins := make([]Plugin, len(sk.topics))
+	i := 0
+	for plugin, _ := range sk.topics {
+		plugins[i] = plugin
+		i += 1
+	}
+	return plugins
+}
+
+func (sk *Scorekeeper) GetTopics(plugin Plugin) []ScorekeeperTopic {
 	entries, ok := sk.topics[plugin]
 	if !ok {
-		entries = make(map[string]topicEntry)
-		sk.topics[plugin] = entries
+		return []ScorekeeperTopic {}
 	}
-	entries[name] = topicEntry{plugin, name}
+	topics := make([]ScorekeeperTopic, len(entries))
+	i := 0
+	for _, entry := range entries {
+		topics[i] = entry
+		i += 1
+	}
+	return topics
 }
 
-func (sk *scorekeeperImpl) emitInner(entry topicEntry, data ScoreValue) {
-	// TODO
-	sk.logger.Printf("scorekeeper: plugin=%s, name=%s, data=%s", entry.plugin.Name(), entry.name, data.AsPlainText())
+func (sk *Scorekeeper) AddTopic(topic ScorekeeperTopic) {
+	sk.logger.Printf("AddTopic: plugin=%s, name=%s", topic.Plugin.Name(), topic.Name)
+	entries, ok := sk.topics[topic.Plugin]
+	if !ok {
+		entries = make(map[string]ScorekeeperTopic)
+		sk.topics[topic.Plugin] = entries
+	}
+	entries[topic.Name] = topic
 }
 
-func (sk *scorekeeperImpl) Emit(plugin Plugin, name string, data ScoreValue) {
+func (sk *Scorekeeper) Fetch(plugin Plugin, name string) (ScoreValueFetcher, error) {
 	var ok bool
-	var entries map[string]topicEntry
-	var entry topicEntry
+	var entries map[string]ScorekeeperTopic
+	var entry ScorekeeperTopic
 	entries, ok = sk.topics[plugin]
 	if ok {
 		entry, ok = entries[name]
 	}
 	if !ok {
-		sk.logger.Printf("unknown topic: plugin=%s, name=%s", plugin.Name(), name)
-		return
+		return nil, errors.New(fmt.Sprintf("unknown topic: plugin=%s, name=%s", plugin.Name(), name))
 	}
-	sk.emitInner(entry, data)
+	return entry.Fetcher, nil
 }
 
-func (sk *scorekeeperImpl) Bind(engine Engine) {
-	sk.engine = engine
-	sk.logger = engine.Logger()
-}
+func (sk *Scorekeeper) Dispose() {}
 
-func (sk *scorekeeperImpl) Dispose() {}
-
-func NewScoreKeeper() ScoreKeeper {
-	return &scorekeeperImpl{
-		logger: nil,
-		engine: nil,
-		topics: make(map[Plugin]map[string]topicEntry),
+func NewScorekeeper(logger *log.Logger, engine Engine) *Scorekeeper {
+	return &Scorekeeper{
+		logger: logger,
+		engine: engine,
+		topics: make(map[Plugin]map[string]ScorekeeperTopic),
 	}
 }

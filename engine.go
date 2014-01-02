@@ -6,7 +6,7 @@ import (
 
 type engineImpl struct {
 	logger          *log.Logger
-	scorekeeper     ScoreKeeper
+	scorekeeper     *Scorekeeper
 	defaultPort     Port
 	spawner         *Spawner
 }
@@ -15,8 +15,12 @@ func (engine *engineImpl) Logger() *log.Logger {
 	return engine.logger
 }
 
-func (engine *engineImpl) ScoreKeeper() ScoreKeeper {
+func (engine *engineImpl) Scorekeeper() *Scorekeeper {
 	return engine.scorekeeper
+}
+
+func (engine *engineImpl) SpawneeStatuses() ([]SpawneeStatus, error) {
+	return engine.spawner.GetSpawneeStatuses()
 }
 
 func (engine *engineImpl) DefaultPort() Port {
@@ -47,13 +51,13 @@ func (engine *engineImpl) Start() error {
 	return engine.spawner.PollMultiple(spawnees)
 }
 
-func NewEngine(logger *log.Logger, scorekeeper ScoreKeeper, defaultPort Port) *engineImpl {
+func NewEngine(logger *log.Logger, defaultPort Port) *engineImpl {
 	engine := &engineImpl{
 		logger:          logger,
-		scorekeeper:     scorekeeper,
+		scorekeeper:     nil,
 		defaultPort:     defaultPort,
 		spawner:         NewSpawner(),
 	}
-	scorekeeper.Bind(engine)
+	engine.scorekeeper = NewScorekeeper(logger, engine)
 	return engine
 }

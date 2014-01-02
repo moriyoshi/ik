@@ -17,21 +17,27 @@ func usage() {
 	os.Exit(0)
 }
 
-type InputOutputFactoryRegistry struct {
+type MultiFactoryRegistry struct {
 	inputFactories  map[string]ik.InputFactory
 	outputFactories map[string]ik.OutputFactory
+	scoreboardFactories map[string]ik.ScoreboardFactory
+	plugins []ik.Plugin
 }
 
-func (registry *InputOutputFactoryRegistry) RegisterInputFactory(factory ik.InputFactory) error {
+func (registry *MultiFactoryRegistry) RegisterInputFactory(factory ik.InputFactory) error {
 	_, alreadyExists := registry.inputFactories[factory.Name()]
 	if alreadyExists {
 		return errors.New(fmt.Sprintf("InputFactory named %s already registered", factory.Name()))
 	}
 	registry.inputFactories[factory.Name()] = factory
+	plugin, ok := factory.(ik.Plugin)
+	if ok {
+		registry.plugins = append(registry.plugins, plugin)
+	}
 	return nil
 }
 
-func (registry *InputOutputFactoryRegistry) LookupInputFactory(name string) ik.InputFactory {
+func (registry *MultiFactoryRegistry) LookupInputFactory(name string) ik.InputFactory {
 	factory, ok := registry.inputFactories[name]
 	if !ok {
 		return nil
@@ -39,16 +45,20 @@ func (registry *InputOutputFactoryRegistry) LookupInputFactory(name string) ik.I
 	return factory
 }
 
-func (registry *InputOutputFactoryRegistry) RegisterOutputFactory(factory ik.OutputFactory) error {
+func (registry *MultiFactoryRegistry) RegisterOutputFactory(factory ik.OutputFactory) error {
 	_, alreadyExists := registry.outputFactories[factory.Name()]
 	if alreadyExists {
 		return errors.New(fmt.Sprintf("OutputFactory named %s already registered", factory.Name()))
 	}
 	registry.outputFactories[factory.Name()] = factory
+	plugin, ok := factory.(ik.Plugin)
+	if ok {
+		registry.plugins = append(registry.plugins, plugin)
+	}
 	return nil
 }
 
-func (registry *InputOutputFactoryRegistry) LookupOutputFactory(name string) ik.OutputFactory {
+func (registry *MultiFactoryRegistry) LookupOutputFactory(name string) ik.OutputFactory {
 	factory, ok := registry.outputFactories[name]
 	if !ok {
 		return nil
@@ -56,11 +66,62 @@ func (registry *InputOutputFactoryRegistry) LookupOutputFactory(name string) ik.
 	return factory
 }
 
-func NewInputOutputFactoryRegistry() *InputOutputFactoryRegistry {
-	return &InputOutputFactoryRegistry {
+func (registry *MultiFactoryRegistry) RegisterScoreboardFactory(factory ik.ScoreboardFactory) error {
+	_, alreadyExists := registry.scoreboardFactories[factory.Name()]
+	if alreadyExists {
+		return errors.New(fmt.Sprintf("ScoreboardFactory named %s already registered", factory.Name()))
+	}
+	registry.scoreboardFactories[factory.Name()] = factory
+	plugin, ok := factory.(ik.Plugin)
+	if ok {
+		registry.plugins = append(registry.plugins, plugin)
+	}
+	return nil
+}
+
+func (registry *MultiFactoryRegistry) LookupScoreboardFactory(name string) ik.ScoreboardFactory {
+	factory, ok := registry.scoreboardFactories[name]
+	if !ok {
+		return nil
+	}
+	return factory
+}
+
+func (registry *MultiFactoryRegistry) Plugins() []ik.Plugin {
+	retval := make([]ik.Plugin, len(registry.plugins))
+	copy(retval, registry.plugins)
+	return retval
+}
+
+func NewMultiFactoryRegistry() *MultiFactoryRegistry {
+	return &MultiFactoryRegistry {
 		inputFactories:  make(map[string]ik.InputFactory),
 		outputFactories: make(map[string]ik.OutputFactory),
+		scoreboardFactories: make(map[string]ik.ScoreboardFactory),
 	}
+}
+
+func configureScoreboards(logger *log.Logger, registry *MultiFactoryRegistry, engine ik.Engine, config *ik.Config) error {
+       for _, v := range config.Root.Elems {
+	       switch v.Name {
+		case "scoreboard":
+			type_ := v.Attrs["type"]
+			scoreboardFactory := registry.LookupScoreboardFactory(type_)
+			if scoreboardFactory == nil {
+				return errors.New("Could not find scoreboard factory: " + type_)
+			}
+			scoreboard, err := scoreboardFactory.New(engine, registry, v)
+			if err != nil {
+				return err
+			}
+			err = engine.Spawn(scoreboard)
+			if err != nil {
+				return err
+			}
+			logger.Printf("Scoreboard plugin loaded: %s", scoreboardFactory.Name())
+		}
+	}
+	return nil
 }
 
 func main() {
@@ -84,7 +145,7 @@ func main() {
 		return
 	}
 
-	registry := NewInputOutputFactoryRegistry()
+	registry := NewMultiFactoryRegistry()
 
 	for _, _plugin := range plugins.GetPlugins() {
 		switch plugin := _plugin.(type) {
@@ -95,13 +156,18 @@ func main() {
 		}
 	}
 
-	scorekeeper := ik.NewScoreKeeper()
-	defer scorekeeper.Dispose()
+	registry.RegisterScoreboardFactory(&HTMLHTTPScoreboardFactory {})
+
 	router := ik.NewFluentRouter()
-	engine := ik.NewEngine(logger, scorekeeper, router)
+	engine := ik.NewEngine(logger, router)
 	defer engine.Dispose()
 
 	err = ik.NewFluentConfigurer(logger, registry, registry, router).Configure(engine, config)
+	if err != nil {
+		println(err.Error())
+		return
+	}
+	err = configureScoreboards(logger, registry, engine, config)
 	if err != nil {
 		println(err.Error())
 		return
