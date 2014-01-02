@@ -1,9 +1,9 @@
 Ik
 ==
 
-Ik is planned to be a humble alternative implementation of fluentd.
+Ik (pronounced ai-kay) is planned to be a humble alternative implementation of fluentd.
 
-"Ik" is a Dutch word for "I" in English and it also sounds very much like the Japanese word "Iku" that literally means "Go".
+"Ik" is also a Dutch word for "I" in English and it concidentally looks very much like the Japanese word "Iku" that literally means "Go".
 
 Installation
 ------------
