@@ -178,7 +178,10 @@ func (input *ForwardInput) Run() error {
 
 func (input *ForwardInput) Shutdown() error {
 	for conn, _ := range input.clients {
-		conn.Close()
+		err := conn.Close()
+		if err != nil {
+			input.logger.Printf("Error during closing connection: %s", err.Error())
+		}
 	}
 	return input.listener.Close()
 }
