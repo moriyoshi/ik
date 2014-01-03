@@ -33,13 +33,9 @@ type ForwardInput struct {
 	entries  int64
 }
 
-type EntryCountTopic struct {
-	input *ForwardInput
-}
+type EntryCountTopic struct {}
 
-type ConnectionCountTopic struct {
-	input *ForwardInput
-}
+type ConnectionCountTopic struct {}
 
 type ForwardInputFactory struct {
 }
@@ -182,7 +178,7 @@ func newForwardClient(input *ForwardInput, logger *log.Logger, conn net.Conn, _c
 	return c
 }
 
-func (input *ForwardInput) Factory() ik.InputFactory {
+func (input *ForwardInput) Factory() ik.Plugin {
 	return input.factory
 }
 
@@ -231,7 +227,7 @@ func newForwardInput(factory *ForwardInputFactory, logger *log.Logger, engine ik
 		logger.Print(err.Error())
 		return nil, err
 	}
-	retval := &ForwardInput{
+	return &ForwardInput{
 		factory:  factory,
 		port:     port,
 		logger:   logger,
@@ -240,28 +236,12 @@ func newForwardInput(factory *ForwardInputFactory, logger *log.Logger, engine ik
 		codec:    &_codec,
 		clients:  make(map[net.Conn]*forwardClient),
 		entries:  0,
-	}
-	engine.Scorekeeper().AddTopic(ik.ScorekeeperTopic {
-		Plugin: factory,
-		Name: "entries",
-		DisplayName: "Total number of entries",
-		Description: "Total number of entries received so far",
-		Fetcher: &EntryCountTopic { retval },
-	})
-	engine.Scorekeeper().AddTopic(ik.ScorekeeperTopic {
-		Plugin: factory,
-		Name: "connections",
-		DisplayName: "Connections",
-		Description: "Number of connections currently handled",
-		Fetcher: &ConnectionCountTopic { retval },
-	})
-	return retval, nil
+	}, nil
 }
 
 func (factory *ForwardInputFactory) Name() string {
 	return "forward"
-}
-
+} 
 func (factory *ForwardInputFactory) New(engine ik.Engine, config *ik.ConfigElement) (ik.Input, error) {
 	listen, ok := config.Attrs["listen"]
 	if !ok {
@@ -275,28 +255,47 @@ func (factory *ForwardInputFactory) New(engine ik.Engine, config *ik.ConfigEleme
 	return newForwardInput(factory, engine.Logger(), engine, bind, engine.DefaultPort())
 }
 
-func (topic *EntryCountTopic) Markup() (ik.Markup, error) {
-	text, err := topic.PlainText()
+func (factory *ForwardInputFactory) BindScorekeeper(scorekeeper *ik.Scorekeeper) {
+	scorekeeper.AddTopic(ik.ScorekeeperTopic {
+		Plugin: factory,
+		Name: "entries",
+		DisplayName: "Total number of entries",
+		Description: "Total number of entries received so far",
+		Fetcher: &EntryCountTopic {},
+	})
+	scorekeeper.AddTopic(ik.ScorekeeperTopic {
+		Plugin: factory,
+		Name: "connections",
+		DisplayName: "Connections",
+		Description: "Number of connections currently handled",
+		Fetcher: &ConnectionCountTopic {},
+	})
+}
+
+func (topic *EntryCountTopic) Markup(input_ ik.PluginInstance) (ik.Markup, error) {
+	text, err := topic.PlainText(input_)
 	if err != nil {
 		return ik.Markup {}, err
 	}
 	return ik.Markup { []ik.MarkupChunk { { Text: text } } }, nil
 }
 
-func (topic *EntryCountTopic) PlainText() (string, error) {
-	return strconv.FormatInt(topic.input.entries, 10), nil
+func (topic *EntryCountTopic) PlainText(input_ ik.PluginInstance) (string, error) {
+	input := input_.(*ForwardInput)
+	return strconv.FormatInt(input.entries, 10), nil
 }
 
-func (topic *ConnectionCountTopic) Markup() (ik.Markup, error) {
-	text, err := topic.PlainText()
+func (topic *ConnectionCountTopic) Markup(input_ ik.PluginInstance) (ik.Markup, error) {
+	text, err := topic.PlainText(input_)
 	if err != nil {
 		return ik.Markup {}, err
 	}
 	return ik.Markup { []ik.MarkupChunk { { Text: text } } }, nil
 }
 
-func (topic *ConnectionCountTopic) PlainText() (string, error) {
-	return strconv.Itoa(len(topic.input.clients)), nil // XXX: race
+func (topic *ConnectionCountTopic) PlainText(input_ ik.PluginInstance) (string, error) {
+	input := input_.(*ForwardInput)
+	return strconv.Itoa(len(input.clients)), nil // XXX: race
 }
 
 var _ = AddPlugin(&ForwardInputFactory{})

@@ -17,16 +17,19 @@ type Spawnee interface {
 	Shutdown() error
 }
 
-type Input interface {
+type PluginInstance interface {
 	Spawnee
-	Factory() InputFactory
+	Factory() Plugin
+}
+
+type Input interface {
+	PluginInstance
 	Port() Port
 }
 
 type Output interface {
+	PluginInstance
 	Port
-	Spawnee
-	Factory() OutputFactory
 }
 
 type MarkupAttributes int
@@ -46,8 +49,8 @@ type Markup struct {
 }
 
 type ScoreValueFetcher interface {
-	PlainText() (string, error)
-	Markup() (Markup, error)
+	PlainText(PluginInstance) (string, error)
+	Markup(PluginInstance) (Markup, error)
 }
 
 type Disposable interface {
@@ -56,6 +59,7 @@ type Disposable interface {
 
 type Plugin interface {
 	Name() string
+	BindScorekeeper(*Scorekeeper)
 }
 
 type ScorekeeperTopic struct {
@@ -72,11 +76,13 @@ type Engine interface {
 	Scorekeeper() *Scorekeeper
 	DefaultPort() Port
 	Spawn(Spawnee) error
+	Launch(PluginInstance) error
 	SpawneeStatuses() ([]SpawneeStatus, error)
+	PluginInstances() []PluginInstance
 }
 
 type InputFactory interface {
-	Name() string
+	Plugin
 	New(engine Engine, config *ConfigElement) (Input, error)
 }
 
@@ -86,7 +92,7 @@ type InputFactoryRegistry interface {
 }
 
 type OutputFactory interface {
-	Name() string
+	Plugin
 	New(engine Engine, config *ConfigElement) (Output, error)
 }
 
@@ -100,11 +106,10 @@ type PluginRegistry interface {
 }
 
 type Scoreboard interface {
-	Spawnee
-	Factory() ScoreboardFactory
+	PluginInstance
 }
 
 type ScoreboardFactory interface {
-	Name() string
+	Plugin
 	New(engine Engine, pluginRegistry PluginRegistry, config *ConfigElement) (Scoreboard, error)
 }

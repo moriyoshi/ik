@@ -83,7 +83,7 @@ func (output *ForwardOutput) Emit(record []ik.FluentRecord) error {
 	return nil
 }
 
-func (output *ForwardOutput) Factory() ik.OutputFactory {
+func (output *ForwardOutput) Factory() ik.Plugin {
 	return output.factory
 }
 
@@ -137,6 +137,9 @@ func (factory *ForwardOutputFactory) New(engine ik.Engine, config *ik.ConfigElem
 	output, err := newForwardOutput(factory, engine.Logger(), bind)
 	output.run_flush(flush_interval)
 	return output, err
+}
+
+func (factory *ForwardOutputFactory) BindScorekeeper(scorekeeper *ik.Scorekeeper) {
 }
 
 var _ = AddPlugin(&ForwardOutputFactory{})

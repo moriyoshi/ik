@@ -61,7 +61,7 @@ func (output *FileOutput) Emit(records []ik.FluentRecord) error {
 	return nil
 }
 
-func (output *FileOutput) Factory() ik.OutputFactory {
+func (output *FileOutput) Factory() ik.Plugin {
 	return output.factory
 }
 
@@ -187,6 +187,9 @@ func (factory *FileOutputFactory) New(engine ik.Engine, config *ik.ConfigElement
 		symlinkPath,
 		os.FileMode(permission),
 	)
+}
+
+func (factory *FileOutputFactory) BindScorekeeper(scorekeeper *ik.Scorekeeper) {
 }
 
 var _ = AddPlugin(&FileOutputFactory{})

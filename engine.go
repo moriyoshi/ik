@@ -9,6 +9,7 @@ type engineImpl struct {
 	scorekeeper     *Scorekeeper
 	defaultPort     Port
 	spawner         *Spawner
+	pluginInstances []PluginInstance
 }
 
 func (engine *engineImpl) Logger() *log.Logger {
@@ -43,6 +44,25 @@ func (engine *engineImpl) Spawn(spawnee Spawnee) error {
 	return engine.spawner.Spawn(spawnee)
 }
 
+func (engine *engineImpl) Launch(pluginInstance PluginInstance) error {
+	var err error
+	spawnee, ok := pluginInstance.(Spawnee)
+	if ok {
+		err = engine.Spawn(spawnee)
+		if err != nil {
+			return err
+		}
+	}
+	engine.pluginInstances = append(engine.pluginInstances, pluginInstance)
+	return nil
+}
+
+func (engine *engineImpl) PluginInstances() []PluginInstance {
+	retval := make([]PluginInstance, len(engine.pluginInstances))
+	copy(retval, engine.pluginInstances)
+	return retval
+}
+
 func (engine *engineImpl) Start() error {
 	spawnees, err := engine.spawner.GetRunningSpawnees()
 	if err != nil {
@@ -51,13 +71,13 @@ func (engine *engineImpl) Start() error {
 	return engine.spawner.PollMultiple(spawnees)
 }
 
-func NewEngine(logger *log.Logger, defaultPort Port) *engineImpl {
+func NewEngine(logger *log.Logger, scorekeeper *Scorekeeper, defaultPort Port) *engineImpl {
 	engine := &engineImpl{
 		logger:          logger,
-		scorekeeper:     nil,
+		scorekeeper:     scorekeeper,
 		defaultPort:     defaultPort,
 		spawner:         NewSpawner(),
+		pluginInstances: make([]PluginInstance, 0),
 	}
-	engine.scorekeeper = NewScorekeeper(logger, engine)
 	return engine
 }

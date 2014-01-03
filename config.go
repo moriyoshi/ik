@@ -268,7 +268,7 @@ func (configurer *FluentConfigurer) Configure(engine Engine, config *Config) err
 			if err != nil {
 				return err
 			}
-			err = engine.Spawn(input)
+			err = engine.Launch(input)
 			if err != nil {
 				return err
 			}
@@ -284,7 +284,7 @@ func (configurer *FluentConfigurer) Configure(engine Engine, config *Config) err
 				return err
 			}
 			configurer.router.AddRule(v.Args, output)
-			err = engine.Spawn(output)
+			err = engine.Launch(output)
 			if err != nil {
 				return err
 			}

@@ -11,6 +11,8 @@ import (
 	"bytes"
 	"reflect"
 	"sync/atomic"
+	"fmt"
+	"html"
 	"github.com/moriyoshi/ik"
 	"github.com/moriyoshi/ik/markup"
 )
@@ -71,6 +73,34 @@ h1 {
   background-color: #ecc;
   color: #f00;
 }
+
+.pluginName.input:before,
+.pluginName.output:before,
+.pluginName.scoreboard:before {
+	display: inline-block;
+	border-radius: 4px;
+	padding: 2px 4px;
+	margin: 0 4px 0 0;
+	font-size: 0.75em;
+	font-weight: bold;
+	color: #eee;
+}
+
+.pluginName.input:before {
+	content: "input";
+	background-color: #083;
+}
+
+.pluginName.output:before {
+	content: "output";
+	background-color: #d30;
+}
+
+.pluginName.scoreboard:before {
+	content: "scoreboard";
+	background-color: #da4;
+}
+
 </style>
 </head>
 <body>
@@ -79,48 +109,46 @@ h1 {
 </header>
 <main>
 <h2>Plugins</h2>
-<h3>Input Plugins</h3>
-<ul>
+<dl>
+<dt>Input Plugins</dt>
+<dd>
 {{range .InputPlugins}}
-<li>{{.Name}}</li>
+{{.Name}}</li>
 {{end}}
-</ul>
-<h3>Output Plugins</h3>
-<ul>
+<dt>Output Plugins</dt>
+<dd>
 {{range .OutputPlugins}}
-<li>{{.Name}}</li>
+{{.Name}}
 {{end}}
-</ul>
-<h3>Scoreboard Plugins</h3>
-<ul>
+</dd>
+<dt>Scoreboard Plugins</dt>
+<dd>
 {{range .ScoreboardPlugins}}
-<li>{{.Name}}</li>
+{{.Name}}
 {{end}}
-</ul>
-<h2>Spawnees</h2>
+</dd>
+</dl>
+<h2>Plugin Statuses</h2>
+{{range $plugin, $pluginInstanceStatuses := .PluginInstanceStatusesPerPlugin}}
+<h3>{{renderPluginName $plugin}}</h3>
+{{range $_, $pluginInstanceStatus := $pluginInstanceStatuses}}
+<h4>Instance #{{$pluginInstanceStatus.Id}}</h4>
+{{with .SpawneeStatus}}
 <table class="table">
-  <thead>
-    <tr>
-      <th>#</th>
-      <th>Name</th>
-      <th>Status</th>
-    </tr>
-  </thead>
   <tbody>
-    {{range .SpawneeStatuses}}
     <tr>
-      <th>{{.Id|printf "%d"}}</th>
-      <th>{{spawneeName .Spawnee}}</th>
+      <th>Spawnee ID</th>
+      <td>{{.Id}}</td>
+    </tr>
+    <tr>
+      <th>Status</th>
       <td class="exitStatus {{renderExitStatusStyle .ExitStatus}}">{{renderExitStatusLabel .ExitStatus}}</td>
     </tr>
-    {{end}}
   </tbody>
 </table>
-<h2>Topics</h2>
-{{range .Plugins}}
-{{$topics := getTopics .}}
-<h3>{{.Name}}</h3>
-{{if len $topics}}
+{{end}}
+<h5>Topics</h5>
+{{if len $pluginInstanceStatus.Topics}}
 <table class="table">
   <thead>
     <tr>
@@ -130,10 +158,10 @@ h1 {
     </tr>
   </thead>
   <tbody>
-    {{range $topics}}
+    {{range $pluginInstanceStatus.Topics}}
     <tr>
-      <th>{{.DisplayName}}</th>
-      <td>{{.Fetcher.Markup|renderMarkup}}</td>
+      <th>{{.DisplayName}} ({{.Name}})</th>
+      <td>{{renderMarkup .Value}}</td>
       <td>{{.Description}}</td>
     </tr>
     {{end}}
@@ -142,6 +170,8 @@ h1 {
 {{else}}
 No topics available
 {{end}}
+{{end}}
+
 {{end}}
 </main>
 </body>
@@ -161,37 +191,47 @@ type HTMLHTTPScoreboard struct {
 type HTMLHTTPScoreboardFactory struct {
 }
 
+type pluginInstanceStatusTopic struct {
+	Name string
+	DisplayName string
+	Description string
+	Value ik.Markup
+}
+
+type pluginInstanceStatus struct {
+	Id int
+	PluginInstance ik.PluginInstance
+	SpawneeStatus *ik.SpawneeStatus
+	Topics []pluginInstanceStatusTopic
+}
+
 type viewModel struct {
 	InputPlugins []ik.InputFactory
 	OutputPlugins []ik.OutputFactory
 	ScoreboardPlugins []ik.ScoreboardFactory
 	Plugins []ik.Plugin
-	SpawneeStatuses []ik.SpawneeStatus
+	PluginInstanceStatusesPerPlugin map[ik.Plugin][]pluginInstanceStatus
+	SpawneeStatuses map[ik.Spawnee]ik.SpawneeStatus
 }
 
-type requestCountFetcher struct {
-	scoreboard *HTMLHTTPScoreboard
-}
+type requestCountFetcher struct {}
 
-func (fetcher *requestCountFetcher) Markup() (ik.Markup, error) {
-	text, err := fetcher.PlainText()
+func (fetcher *requestCountFetcher) Markup(scoreboard_ ik.PluginInstance) (ik.Markup, error) {
+	text, err := fetcher.PlainText(scoreboard_)
 	if err != nil {
 		return ik.Markup {}, err
 	}
 	return ik.Markup { []ik.MarkupChunk { { Attrs: 0, Text: text } } }, nil
 }
 
-func (fetcher *requestCountFetcher) PlainText() (string, error) {
-	return strconv.FormatInt(fetcher.scoreboard.requests, 10), nil
+func (fetcher *requestCountFetcher) PlainText(scoreboard_ ik.PluginInstance) (string, error) {
+	scoreboard := scoreboard_.(*HTMLHTTPScoreboard)
+	return strconv.FormatInt(scoreboard.requests, 10), nil
 }
 
 func spawneeName(spawnee ik.Spawnee) string {
 	switch spawnee_ := spawnee.(type) {
-	case ik.Input:
-		return spawnee_.Factory().Name()
-	case ik.Output:
-		return spawnee_.Factory().Name()
-	case ik.Scoreboard:
+	case ik.PluginInstance:
 		return spawnee_.Factory().Name()
 	default:
 		return reflect.TypeOf(spawnee_).Name()
@@ -225,6 +265,28 @@ func renderMarkup(markup_ ik.Markup) template.HTML {
 	return template.HTML(buf.String())
 }
 
+func renderPluginType(plugin ik.Plugin) string {
+	switch plugin.(type) {
+	case ik.InputFactory:
+		return "input"
+	case ik.OutputFactory:
+		return "output"
+	case ik.ScoreboardFactory:
+		return "scoreboard"
+	default:
+		return "unknown"
+	}
+}
+
+func renderPluginName(plugin ik.Plugin) template.HTML {
+	return template.HTML(
+		fmt.Sprintf(`<span class="pluginName %s">%s</span>`,
+			html.EscapeString(renderPluginType(plugin)),
+			html.EscapeString(html.EscapeString(plugin.Name())),
+		),
+	)
+}
+
 func (scoreboard *HTMLHTTPScoreboard) Run() error {
 	scoreboard.server.Serve(scoreboard.listener)
 	return nil
@@ -234,7 +296,7 @@ func (scoreboard *HTMLHTTPScoreboard) Shutdown() error {
 	return scoreboard.listener.Close()
 }
 
-func (scoreboard *HTMLHTTPScoreboard) Factory() ik.ScoreboardFactory {
+func (scoreboard *HTMLHTTPScoreboard) Factory() ik.Plugin {
 	return scoreboard.factory
 }
 
@@ -246,9 +308,12 @@ func (scoreboard *HTMLHTTPScoreboard) ServeHTTP(resp http.ResponseWriter, req *h
 	atomic.AddInt64(&scoreboard.requests, 1)
 	resp.Header().Set("Content-Type", "text/html; charset=utf-8")
 	resp.WriteHeader(200)
-	spawneeStatuses, err := scoreboard.engine.SpawneeStatuses()
-	if err != nil {
-		spawneeStatuses = nil
+	spawneeStatuses_, err := scoreboard.engine.SpawneeStatuses()
+	spawneeStatuses := make(map[ik.Spawnee]ik.SpawneeStatus)
+	if err == nil {
+		for _, spawneeStatus := range spawneeStatuses_ {
+			spawneeStatuses[spawneeStatus.Spawnee] = spawneeStatus
+		}
 	}
 	plugins := scoreboard.registry.Plugins()
 	inputPlugins := make([]ik.InputFactory, 0)
@@ -264,11 +329,45 @@ func (scoreboard *HTMLHTTPScoreboard) ServeHTTP(resp http.ResponseWriter, req *h
 			scoreboardPlugins = append(scoreboardPlugins, plugin_)
 		}
 	}
+	pluginInstances := scoreboard.engine.PluginInstances()
+	pluginInstanceStatusesPerPlugin := make(map[ik.Plugin][]pluginInstanceStatus)
+	for i, pluginInstance := range pluginInstances {
+		plugin := pluginInstance.Factory()
+		topics_ := scoreboard.engine.Scorekeeper().GetTopics(plugin)
+		topics := make([]pluginInstanceStatusTopic, len(topics_))
+		for i, topic_ := range topics_ {
+			topics[i].Name = topic_.Name
+			topics[i].DisplayName = topic_.DisplayName
+			topics[i].Description = topic_.Description
+			topics[i].Value, err = topic_.Fetcher.Markup(pluginInstance)
+			if err != nil {
+				errorMessage := err.Error()
+				scoreboard.logger.Print(errorMessage)
+				topics[i].Value = ik.Markup { []ik.MarkupChunk { { Attrs: ik.Embolden, Text: fmt.Sprintf("Error: %s", errorMessage) } } }
+			}
+		}
+		pluginInstanceStatus_ := pluginInstanceStatus {
+			Id: i + 1,
+			PluginInstance: pluginInstance,
+			Topics: topics,
+		}
+		spawneeStatus, ok := spawneeStatuses[pluginInstance]
+		if ok {
+			pluginInstanceStatus_.SpawneeStatus = &spawneeStatus
+		}
+		pluginInstanceStatuses_, ok := pluginInstanceStatusesPerPlugin[plugin]
+		if !ok {
+			pluginInstanceStatuses_ = make([]pluginInstanceStatus, 0)
+		}
+		pluginInstanceStatuses_ = append(pluginInstanceStatuses_, pluginInstanceStatus_)
+		pluginInstanceStatusesPerPlugin[plugin] = pluginInstanceStatuses_
+	}
 	scoreboard.template.Execute(resp, viewModel {
 		InputPlugins: inputPlugins,
 		OutputPlugins: outputPlugins,
 		ScoreboardPlugins: scoreboardPlugins,
 		Plugins: plugins,
+		PluginInstanceStatusesPerPlugin: pluginInstanceStatusesPerPlugin,
 		SpawneeStatuses: spawneeStatuses,
 	})
 }
@@ -279,9 +378,8 @@ func newHTMLHTTPScoreboard(factory *HTMLHTTPScoreboardFactory, logger *log.Logge
 			"renderExitStatusStyle": renderExitStatusStyle,
 			"renderExitStatusLabel": renderExitStatusLabel,
 			"renderMarkup": renderMarkup,
-			"getTopics": func(plugin ik.Plugin) []ik.ScorekeeperTopic {
-				return engine.Scorekeeper().GetTopics(plugin)
-			},
+			"renderPluginName": renderPluginName,
+			"renderPluginType": renderPluginType,
 		}).Parse(mainTemplate)
 	if err != nil {
 		logger.Print(err.Error())
@@ -311,13 +409,6 @@ func newHTMLHTTPScoreboard(factory *HTMLHTTPScoreboardFactory, logger *log.Logge
 		listener: listener,
 		requests: 0,
 	}
-	engine.Scorekeeper().AddTopic(ik.ScorekeeperTopic {
-		Plugin: factory,
-		Name: "requests",
-		DisplayName: "Requests",
-		Description: "Number of requests accepted",
-		Fetcher: &requestCountFetcher {scoreboard: retval},
-	})
 	retval.server.Handler = retval
 	return retval, nil
 }
@@ -357,4 +448,14 @@ func (factory *HTMLHTTPScoreboardFactory) New(engine ik.Engine, registry ik.Plug
 		}
 	}
 	return newHTMLHTTPScoreboard(factory, engine.Logger(), engine, registry, bind, readTimeout, writeTimeout)
+}
+
+func (factory *HTMLHTTPScoreboardFactory) BindScorekeeper(scorekeeper *ik.Scorekeeper) {
+	scorekeeper.AddTopic(ik.ScorekeeperTopic {
+		Plugin: factory,
+		Name: "requests",
+		DisplayName: "Requests",
+		Description: "Number of requests accepted",
+		Fetcher: &requestCountFetcher {},
+	})
 }

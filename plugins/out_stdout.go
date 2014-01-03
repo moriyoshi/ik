@@ -20,7 +20,7 @@ func (output *StdoutOutput) Emit(record []ik.FluentRecord) error {
 	return nil
 }
 
-func (output *StdoutOutput) Factory() ik.OutputFactory {
+func (output *StdoutOutput) Factory() ik.Plugin {
 	return output.factory
 }
 
@@ -53,6 +53,9 @@ func (factory *StdoutOutputFactory) Name() string {
 
 func (factory *StdoutOutputFactory) New(engine ik.Engine, _ *ik.ConfigElement) (ik.Output, error) {
 	return newStdoutOutput(factory, engine.Logger())
+}
+
+func (factory *StdoutOutputFactory) BindScorekeeper(scorekeeper *ik.Scorekeeper) {
 }
 
 var _ = AddPlugin(&StdoutOutputFactory{})

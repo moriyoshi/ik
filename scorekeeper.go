@@ -8,7 +8,6 @@ import (
 
 type Scorekeeper struct {
 	logger *log.Logger
-	engine Engine
 	topics map[Plugin]map[string]ScorekeeperTopic
 }
 
@@ -62,10 +61,9 @@ func (sk *Scorekeeper) Fetch(plugin Plugin, name string) (ScoreValueFetcher, err
 
 func (sk *Scorekeeper) Dispose() {}
 
-func NewScorekeeper(logger *log.Logger, engine Engine) *Scorekeeper {
+func NewScorekeeper(logger *log.Logger) *Scorekeeper {
 	return &Scorekeeper{
 		logger: logger,
-		engine: engine,
 		topics: make(map[Plugin]map[string]ScorekeeperTopic),
 	}
 }

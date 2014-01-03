@@ -22,28 +22,33 @@ func (foo *Foo) Shutdown() error {
 	return nil
 }
 
-type Bar struct{ c chan bool }
+type Bar struct { c chan interface{} }
 
 func (bar *Bar) Run() error {
-	<-bar.c
-	panic("PANIC")
+	panic(<-bar.c)
 }
 
-func (foo *Bar) Shutdown() error {
+func (bar *Bar) Shutdown() error {
 	return nil
+}
+
+type Baz struct { message string }
+
+func (baz *Baz) String() string {
+	return baz.message
 }
 
 func TestSpawner_Spawn(t *testing.T) {
 	spawner := NewSpawner()
 	f := &Foo{"", make(chan string)}
 	spawner.Spawn(f)
-	err, _ := spawner.GetStatus(f)
+	err := spawner.GetStatus(f)
 	if err != Continue {
 		t.Fail()
 	}
 	f.c <- "result"
 	spawner.Poll(f)
-	err, _ = spawner.GetStatus(f)
+	err = spawner.GetStatus(f)
 	if err == Continue {
 		t.Fail()
 	}
@@ -52,21 +57,42 @@ func TestSpawner_Spawn(t *testing.T) {
 	}
 }
 
-func TestSpawner_Panic(t *testing.T) {
+func TestSpawner_Panic1(t *testing.T) {
 	spawner := NewSpawner()
-	f := &Bar{make(chan bool)}
+	f := &Bar{make(chan interface{})}
 	spawner.Spawn(f)
-	err, _ := spawner.GetStatus(f)
+	err := spawner.GetStatus(f)
 	if err != Continue {
 		t.Fail()
 	}
-	f.c <- false
+	f.c <- "PANIC"
 	spawner.Poll(f)
-	err, panic_ := spawner.GetStatus(f)
-	if err == Continue {
+	err = spawner.GetStatus(f)
+	panicked, ok := err.(*Panicked)
+	if !ok {
 		t.Fail()
 	}
-	if panic_ != "PANIC" {
+	if panicked.Error() != "PANIC" {
+		t.Fail()
+	}
+}
+
+func TestSpawner_Panic2(t *testing.T) {
+	spawner := NewSpawner()
+	f := &Bar{make(chan interface{})}
+	spawner.Spawn(f)
+	err := spawner.GetStatus(f)
+	if err != Continue {
+		t.Fail()
+	}
+	f.c <- &Baz { "BAZ!" }
+	spawner.Poll(f)
+	err = spawner.GetStatus(f)
+	panicked, ok := err.(*Panicked)
+	if !ok {
+		t.Fail()
+	}
+	if panicked.Error() != "(*Baz) BAZ!" {
 		t.Fail()
 	}
 }

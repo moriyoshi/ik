@@ -1,6 +1,10 @@
 package ik
 
-import "sync"
+import (
+	"sync"
+	"reflect"
+	"fmt"
+)
 
 type descriptorListHead struct {
 	next *spawneeDescriptor
@@ -19,7 +23,6 @@ type spawneeDescriptor struct {
 	id                int
 	spawnee           Spawnee
 	exitStatus        error
-	panic             interface{}
 	shutdownRequested bool
 	mtx               sync.Mutex
 	cond              *sync.Cond
@@ -34,7 +37,6 @@ type SpawneeStatus struct {
 type dispatchReturnValue struct {
 	b bool
 	s []Spawnee
-	i interface{}
 	e error
 	ss []SpawneeStatus
 }
@@ -52,7 +54,38 @@ const (
 
 type ContinueType struct{}
 
+type Panicked struct {
+	panic interface{}
+}
+
 func (_ *ContinueType) Error() string { return "" }
+
+func typeName(type_ reflect.Type) string {
+	if type_.Kind() == reflect.Ptr {
+		return "*" + typeName(type_.Elem())
+	} else {
+		return type_.Name()
+	}
+}
+
+func (panicked *Panicked) Error() string {
+	switch panic_ := panicked.panic.(type) {
+	case string:
+		return panic_
+	case error:
+		return fmt.Sprintf("(%s) %s", typeName(reflect.TypeOf(panic_)), panic_.Error())
+	default:
+		type_ := reflect.TypeOf(panic_)
+		method, ok := type_.MethodByName("String")
+		if ok && method.Type.NumIn() == 1 {
+			result := method.Func.Call([]reflect.Value { reflect.ValueOf(panic_) })
+			if len(result) == 1 && result[0].Type().Kind() == reflect.String {
+				return fmt.Sprintf("(%s) %s", typeName(type_), result[0].String())
+			}
+		}
+		return fmt.Sprintf("(%s)", typeName(type_))
+	}
+}
 
 var Continue = &ContinueType{}
 
@@ -84,7 +117,6 @@ func newDescriptor(spawnee Spawnee, id int) *spawneeDescriptor {
 		id:                id,
 		spawnee:           spawnee,
 		exitStatus:        Continue,
-		panic:             nil,
 		shutdownRequested: false,
 		mtx:               sync.Mutex{},
 		cond:              nil,
@@ -115,16 +147,14 @@ func (spawner *Spawner) spawn(spawnee Spawnee, retval chan dispatchReturnValue) 
 				spawnee: spawnee,
 			}
 			spawner.cond.Broadcast()
-			retval <- dispatchReturnValue{true, nil, nil, nil, nil}
+			retval <- dispatchReturnValue{true, nil, nil, nil}
 		}()
 		var exitStatus error = nil
-		var panic_ interface{} = nil
 		func() {
 			defer func() {
 				r := recover()
 				if r != nil {
-					exitStatus = nil
-					panic_ = r
+					exitStatus = &Panicked { r }
 				}
 			}()
 			exitStatus = Continue
@@ -136,7 +166,6 @@ func (spawner *Spawner) spawn(spawnee Spawnee, retval chan dispatchReturnValue) 
 			spawner.mtx.Lock()
 			defer spawner.mtx.Unlock()
 			descriptor.exitStatus = exitStatus
-			descriptor.panic = panic_
 			// remove from alive list
 			if descriptor.head_alive.prev != nil {
 				descriptor.head_alive.prev.head_alive.next = descriptor.head_alive.next
@@ -178,9 +207,9 @@ func (spawner *Spawner) kill(spawnee Spawnee, retval chan dispatchReturnValue) {
 	if ok && descriptor.exitStatus != Continue {
 		descriptor.shutdownRequested = true
 		err := spawnee.Shutdown()
-		retval <- dispatchReturnValue{true, nil, nil, err, nil}
+		retval <- dispatchReturnValue{true, nil, err, nil}
 	} else {
-		retval <- dispatchReturnValue{false, nil, nil, nil, nil}
+		retval <- dispatchReturnValue{false, nil, nil, nil}
 	}
 }
 
@@ -189,9 +218,9 @@ func (spawner *Spawner) getStatus(spawnee Spawnee, retval chan dispatchReturnVal
 	defer spawner.mtx.Unlock()
 	descriptor, ok := spawner.m[spawnee]
 	if ok {
-		retval <- dispatchReturnValue{false, nil, descriptor.panic, descriptor.exitStatus, nil}
+		retval <- dispatchReturnValue{false, nil, descriptor.exitStatus, nil}
 	} else {
-		retval <- dispatchReturnValue{false, nil, nil, nil, nil}
+		retval <- dispatchReturnValue{false, nil, nil, nil}
 	}
 }
 
@@ -206,7 +235,7 @@ func (spawner *Spawner) getRunningSpawnees(_ Spawnee, retval chan dispatchReturn
 		descriptor = descriptor.head_alive.next
 		i += 1
 	}
-	retval <- dispatchReturnValue{false, spawnees, nil, nil, nil}
+	retval <- dispatchReturnValue{false, spawnees, nil, nil}
 }
 
 func (spawner *Spawner) getStoppedSpawnees(_ Spawnee, retval chan dispatchReturnValue) {
@@ -220,7 +249,7 @@ func (spawner *Spawner) getStoppedSpawnees(_ Spawnee, retval chan dispatchReturn
 		descriptor = descriptor.head_dead.next
 		i += 1
 	}
-	retval <- dispatchReturnValue{false, spawnees, nil, nil, nil}
+	retval <- dispatchReturnValue{false, spawnees, nil, nil}
 }
 
 func (spawner *Spawner) getSpawneeStatuses(_ Spawnee, retval chan dispatchReturnValue) {
@@ -232,7 +261,7 @@ func (spawner *Spawner) getSpawneeStatuses(_ Spawnee, retval chan dispatchReturn
 		spawneeStatuses[i] = SpawneeStatus {Id: descriptor.id, Spawnee: spawnee, ExitStatus: descriptor.exitStatus}
 		i += 1
 	}
-	retval <- dispatchReturnValue{false, nil, nil, nil, spawneeStatuses}
+	retval <- dispatchReturnValue{false, nil, nil, spawneeStatuses}
 }
 
 
@@ -250,11 +279,11 @@ func (spawner *Spawner) Kill(spawnee Spawnee) (bool, error) {
 	return retval_.b, retval_.e
 }
 
-func (spawner *Spawner) GetStatus(spawnee Spawnee) (error, interface{}) {
+func (spawner *Spawner) GetStatus(spawnee Spawnee) error {
 	retval := make(chan dispatchReturnValue)
 	spawner.c <- dispatch{spawner.getStatus, spawnee, retval}
 	retval_ := <-retval
-	return retval_.e, retval_.i
+	return retval_.e
 }
 
 func (spawner *Spawner) GetRunningSpawnees() ([]Spawnee, error) {
