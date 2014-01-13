@@ -82,7 +82,6 @@ func (ikb *IkBench) Run(logger *log.Logger, params *IkBenchParams) {
 			retryCount := params.MaxRetryCount
 			outer: for {
 				conn, err := net.Dial("tcp", params.Host)
-				defer conn.Close()
 				if err != nil {
 					log.Print(err.Error())
 					retryCount -= 1
@@ -91,6 +90,7 @@ func (ikb *IkBench) Run(logger *log.Logger, params *IkBenchParams) {
 					}
 					continue
 				}
+				defer conn.Close()
 				for i := 0; i < attempts; i += 1 {
 					for {
 						err = ikb.Send(conn, params)
