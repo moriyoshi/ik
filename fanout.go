@@ -8,9 +8,9 @@ func (fanout *Fanout) AddPort(port Port) {
 	fanout.ports = append(fanout.ports, port)
 }
 
-func (fanout *Fanout) Emit(records []FluentRecord) error {
+func (fanout *Fanout) Emit(recordSets []FluentRecordSet) error {
 	for _, port := range fanout.ports {
-		err := port.Emit(records)
+		err := port.Emit(recordSets)
 		if err != nil {
 			panic("MUST DO SOMETHING GOOD") // TODO
 		}

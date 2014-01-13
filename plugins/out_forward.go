@@ -21,8 +21,20 @@ type ForwardOutput struct {
 	buffer  bytes.Buffer
 }
 
-func (output *ForwardOutput) encodeEntry(record ik.FluentRecord) error {
-	v := []interface{}{record.Tag, record.Timestamp, record.Data}
+func (output *ForwardOutput) encodeEntry(tag string, record ik.TinyFluentRecord) error {
+	v := []interface{} { tag, record.Timestamp, record.Data }
+	if output.enc == nil {
+		output.enc = codec.NewEncoder(&output.buffer, output.codec)
+	}
+	err := output.enc.Encode(v)
+	if err != nil {
+		return err
+	}
+	return err
+}
+
+func (output *ForwardOutput) encodeRecordSet(recordSet ik.FluentRecordSet) error {
+	v := []interface{} { recordSet.Tag, recordSet.Records }
 	if output.enc == nil {
 		output.enc = codec.NewEncoder(&output.buffer, output.codec)
 	}
@@ -43,7 +55,6 @@ func (output *ForwardOutput) flush() error {
 			output.conn = conn
 		}
 	}
-
 	n, err := output.buffer.WriteTo(output.conn)
 	if err != nil {
 		output.logger.Printf("Write failed. size: %d, buf size: %d, error: %#v", n, output.buffer.Len(), err.Error())
@@ -70,15 +81,13 @@ func (output *ForwardOutput) run_flush(flush_interval int) {
 	}()
 }
 
-func (output *ForwardOutput) Emit(record []ik.FluentRecord) error {
-	for _, record := range record {
-		//output.logger.Printf("%d %s: %s\n", record.Timestamp, record.Tag, record.Data)
-		err := output.encodeEntry(record)
+func (output *ForwardOutput) Emit(recordSet []ik.FluentRecordSet) error {
+	for _, recordSet := range recordSet {
+		err := output.encodeRecordSet(recordSet)
 		if err != nil {
 			output.logger.Printf("%#v", err)
 			return err
 		}
-		//output.logger.Printf("Buffer size: %d\n", output.buffer.Len())
 	}
 	return nil
 }
@@ -103,6 +112,7 @@ func newForwardOutput(factory *ForwardOutputFactory, logger *log.Logger, bind st
 	_codec := codec.MsgpackHandle{}
 	_codec.MapType = reflect.TypeOf(map[string]interface{}(nil))
 	_codec.RawToString = false
+	_codec.StructToArray = true
 	return &ForwardOutput{
 		factory: factory,
 		logger:  logger,

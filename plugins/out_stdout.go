@@ -13,9 +13,11 @@ type StdoutOutput struct {
 	logger  *log.Logger
 }
 
-func (output *StdoutOutput) Emit(record []ik.FluentRecord) error {
-	for _, record := range record {
-		fmt.Fprintf(os.Stdout, "%d %s: %s\n", record.Timestamp, record.Tag, record.Data)
+func (output *StdoutOutput) Emit(recordSets []ik.FluentRecordSet) error {
+	for _, recordSet := range recordSets {
+		for _, record := range recordSet.Records {
+			fmt.Fprintf(os.Stdout, "%d %s: %s\n", record.Timestamp, recordSet.Tag, record.Data)
+		}
 	}
 	return nil
 }

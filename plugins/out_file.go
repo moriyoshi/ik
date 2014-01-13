@@ -27,7 +27,7 @@ type FileOutput struct {
 	closer func() error
 	timeFormat string
 	location *time.Location
-	c chan []ik.FluentRecord
+	c chan []ik.FluentRecordSet
 	cancel chan bool
 }
 
@@ -56,8 +56,8 @@ func (output *FileOutput) formatData(data map[string]interface{}) (string, error
 	return string(b), nil // XXX: byte => rune
 }
 
-func (output *FileOutput) Emit(records []ik.FluentRecord) error {
-	output.c <- records
+func (output *FileOutput) Emit(recordSets []ik.FluentRecordSet) error {
+	output.c <- recordSets
 	return nil
 }
 
@@ -69,19 +69,21 @@ func (output *FileOutput) Run() error {
 	select {
 	case <- output.cancel:
 		return nil
-	case records := <-output.c:
-		for _, record := range records {
-			formattedData, err := output.formatData(record.Data)
-			if err != nil {
-				return err
+	case recordSets := <-output.c:
+		for _, recordSet := range recordSets {
+			for _, record := range recordSet.Records {
+				formattedData, err := output.formatData(record.Data)
+				if err != nil {
+					return err
+				}
+				fmt.Fprintf(
+					output.out,
+					"%s\t%s\t%s\n",
+					output.formatTime(record.Timestamp),
+					recordSet.Tag,
+					formattedData,
+				)
 			}
-			fmt.Fprintf(
-				output.out,
-				"%s\t%s\t%s\n",
-				output.formatTime(record.Timestamp),
-				record.Tag,
-				formattedData,
-			)
 		}
 		err := output.out.Flush()
 		if err != nil {
@@ -144,7 +146,7 @@ func newFileOutput(factory *FileOutputFactory, logger *log.Logger, path string, 
 		closer: closer,
 		timeFormat: timeFormat,
 		location: time.UTC,
-		c: make(chan []ik.FluentRecord, 100 /* FIXME */),
+		c: make(chan []ik.FluentRecordSet, 100 /* FIXME */),
 		cancel: make(chan bool),
 	}, nil
 }

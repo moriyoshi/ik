@@ -51,29 +51,34 @@ func coerceInPlace(data map[string]interface{}) {
 	}
 }
 
-func decodeTinyEntries(tag []byte, entries []interface{}) ([]ik.FluentRecord, error) {
-	retval := make([]ik.FluentRecord, len(entries))
+func decodeRecordSet(tag []byte, entries []interface{}) (ik.FluentRecordSet, error) {
+	records := make([]ik.TinyFluentRecord, len(entries))
 	for i, _entry := range entries {
-		entry := _entry.([]interface{})
+		entry, ok := _entry.([]interface{})
+		if !ok {
+			return ik.FluentRecordSet {}, errors.New("Failed to decode recordSet")
+		}
 		timestamp, ok := entry[0].(uint64)
 		if !ok {
-			return nil, errors.New("Failed to decode timestamp field")
+			return ik.FluentRecordSet {}, errors.New("Failed to decode timestamp field")
 		}
 		data, ok := entry[1].(map[string]interface{})
 		if !ok {
-			return nil, errors.New("Failed to decode data field")
+			return ik.FluentRecordSet {}, errors.New("Failed to decode data field")
 		}
 		coerceInPlace(data)
-		retval[i] = ik.FluentRecord{
-			Tag:       string(tag), // XXX: byte => rune
+		records[i] = ik.TinyFluentRecord {
 			Timestamp: timestamp,
 			Data:      data,
 		}
 	}
-	return retval, nil
+	return ik.FluentRecordSet {
+		Tag:       string(tag), // XXX: byte => rune
+		Records:   records,
+	}, nil
 }
 
-func (c *forwardClient) decodeEntries() ([]ik.FluentRecord, error) {
+func (c *forwardClient) decodeEntries() ([]ik.FluentRecordSet, error) {
 	v := []interface{}{nil, nil, nil}
 	err := c.dec.Decode(&v)
 	if err != nil {
@@ -84,7 +89,7 @@ func (c *forwardClient) decodeEntries() ([]ik.FluentRecord, error) {
 		return nil, errors.New("Failed to decode tag field")
 	}
 
-	var retval []ik.FluentRecord
+	var retval []ik.FluentRecordSet
 	switch timestamp_or_entries := v[1].(type) {
 	case uint64:
 		timestamp := timestamp_or_entries
@@ -93,11 +98,15 @@ func (c *forwardClient) decodeEntries() ([]ik.FluentRecord, error) {
 			return nil, errors.New("Failed to decode data field")
 		}
 		coerceInPlace(data)
-		retval = []ik.FluentRecord{
+		retval = []ik.FluentRecordSet {
 			{
 				Tag:       string(tag), // XXX: byte => rune
-				Timestamp: timestamp,
-				Data:      data,
+				Records: []ik.TinyFluentRecord {
+					{
+						Timestamp: timestamp,
+						Data:      data,
+					},
+				},
 			},
 		}
 	case float64:
@@ -106,31 +115,37 @@ func (c *forwardClient) decodeEntries() ([]ik.FluentRecord, error) {
 		if !ok {
 			return nil, errors.New("Failed to decode data field")
 		}
-		retval = []ik.FluentRecord{
+		retval = []ik.FluentRecordSet {
 			{
 				Tag:       string(tag), // XXX: byte => rune
-				Timestamp: timestamp,
-				Data:      data,
+				Records: []ik.TinyFluentRecord {
+					{
+						Timestamp: timestamp,
+						Data:      data,
+					},
+				},
 			},
 		}
 	case []interface{}:
 		if !ok {
 			return nil, errors.New("Unexpected payload format")
 		}
-		retval, err = decodeTinyEntries(tag, timestamp_or_entries)
+		recordSet, err := decodeRecordSet(tag, timestamp_or_entries)
 		if err != nil {
 			return nil, err
 		}
+		retval = []ik.FluentRecordSet { recordSet }
 	case []byte:
 		entries := make([]interface{}, 0)
 		err := codec.NewDecoderBytes(timestamp_or_entries, c.codec).Decode(&entries)
 		if err != nil {
 			return nil, err
 		}
-		retval, err = decodeTinyEntries(tag, entries)
+		recordSet, err := decodeRecordSet(tag, entries)
 		if err != nil {
 			return nil, err
 		}
+		retval = []ik.FluentRecordSet { recordSet }
 	default:
 		return nil, errors.New(fmt.Sprintf("Unknown type: %t", timestamp_or_entries))
 	}
@@ -138,26 +153,38 @@ func (c *forwardClient) decodeEntries() ([]ik.FluentRecord, error) {
 	return retval, nil
 }
 
-func (c *forwardClient) handle() {
-	for {
-		entries, err := c.decodeEntries()
-		if err != nil {
-			err_, ok := err.(net.Error)
-			if ok {
-				if err_.Temporary() {
-					c.logger.Println("Temporary failure: %s", err_.Error())
-					continue
-				}
+
+func handleInner(c *forwardClient) bool {
+	recordSets, err := c.decodeEntries()
+	defer func() {
+		if len(recordSets) > 0 {
+			err_ := c.input.Port().Emit(recordSets)
+			if err_ != nil {
+				c.logger.Print(err_.Error())
 			}
-			if err == io.EOF {
-				c.logger.Printf("Client %s closed the connection", c.conn.RemoteAddr().String())
-			} else {
-				c.logger.Print(err.Error())
-			}
-			break
 		}
-		c.input.Port().Emit(entries)
+	}()
+	if err == nil {
+		return true;
 	}
+
+	err_, ok := err.(net.Error)
+	if ok {
+		if err_.Temporary() {
+			c.logger.Println("Temporary failure: %s", err_.Error())
+			return true
+		}
+	}
+	if err == io.EOF {
+		c.logger.Printf("Client %s closed the connection", c.conn.RemoteAddr().String())
+	} else {
+		c.logger.Print(err.Error())
+	}
+	return false
+}
+
+func (c *forwardClient) handle() {
+	for handleInner(c) {}
 	err := c.conn.Close()
 	if err != nil {
 		c.logger.Print(err.Error())

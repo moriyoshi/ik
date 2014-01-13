@@ -8,8 +8,18 @@ type FluentRecord struct {
 	Data      map[string]interface{}
 }
 
+type TinyFluentRecord struct {
+	Timestamp uint64
+	Data      map[string]interface{}
+}
+
+type FluentRecordSet struct {
+	Tag       string
+	Records   []TinyFluentRecord
+}
+
 type Port interface {
-	Emit(record []FluentRecord) error
+	Emit(recordSets []FluentRecordSet) error
 }
 
 type Spawnee interface {

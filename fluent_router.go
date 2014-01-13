@@ -121,28 +121,28 @@ func (router *FluentRouter) AddRule(pattern string, port Port) error {
 	return nil
 }
 
-func (router *FluentRouter) Emit(records []FluentRecord) error {
-	recordMap := make(map[Port][]FluentRecord)
-	numRecords := len(records)
-	for i := 0; i < numRecords; i += 1 {
-		record := &records[i]
+func (router *FluentRouter) Emit(recordSets []FluentRecordSet) error {
+	recordSetsMap := make(map[Port][]FluentRecordSet)
+	numRecordSets := len(recordSets)
+	for i := 0; i < numRecordSets; i += 1 {
+		recordSet := &recordSets[i]
 		for _, rule := range router.rules {
-			if rule.re.MatchString(record.Tag) {
-				recordsForPort, ok := recordMap[rule.port]
+			if rule.re.MatchString(recordSet.Tag) {
+				recordSetsForPort, ok := recordSetsMap[rule.port]
 				if !ok {
-					recordsForPort = make([]FluentRecord, 0)
+					recordSetsForPort = make([]FluentRecordSet, 0)
 				} else {
-					lastRecord := &recordsForPort[len(recordsForPort) - 1]
-					if &lastRecord.Data == &record.Data {
+					lastRecordSets := &recordSetsForPort[len(recordSetsForPort) - 1]
+					if &lastRecordSets.Records == &recordSet.Records {
 						continue
 					}
 				}
-				recordMap[rule.port] = append(recordsForPort, *record)
+				recordSetsMap[rule.port] = append(recordSetsForPort, *recordSet)
 			}
 		}
 	}
-	for port, records := range recordMap {
-		err := port.Emit(records)
+	for port, recordSets := range recordSetsMap {
+		err := port.Emit(recordSets)
 		if err != nil {
 			return err
 		}
