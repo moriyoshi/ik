@@ -45,6 +45,13 @@ type Output interface {
 type MarkupAttributes int
 
 const (
+	Red        = 0x00001
+	Green      = 0x00002
+	Yellow     = 0x00003
+	Blue       = 0x00004
+	Magenta    = 0x00005
+	Cyan       = 0x00006
+	White      = 0x00007
 	Embolden   = 0x10000
 	Underlined = 0x20000
 )

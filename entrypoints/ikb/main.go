@@ -10,8 +10,13 @@ import (
 	"time"
 	"log"
 	"fmt"
+	"math"
 	"strconv"
+	"sync/atomic"
+	"github.com/moriyoshi/ik"
+	"github.com/moriyoshi/ik/markup"
 	"github.com/ugorji/go/codec"
+	termutil "github.com/andrew-d/go-termutil"
 )
 
 type Record struct {
@@ -23,6 +28,11 @@ type IkBench struct {
 	codec codec.MsgpackHandle
 }
 
+type IkBenchReporter interface {
+	ReportRecordsSent(numberOfRecordsSent int64, now time.Time, start time.Time)
+	ReportFinal(numberOfRecordsSent int64, now time.Time, start time.Time)
+}
+
 type IkBenchParams struct {
 	Host string
 	Simple bool
@@ -32,6 +42,8 @@ type IkBenchParams struct {
 	Tag string
 	Data map[string]interface{}
 	MaxRetryCount int
+	ReportingFrequency int
+	Reporter IkBenchReporter
 }
 
 func (ikb *IkBench) encodeEntrySingle(buf *bytes.Buffer, tag string, record Record) error {
@@ -69,10 +81,14 @@ func (ikb *IkBench) Send(conn net.Conn, params *IkBenchParams) error {
 }
 
 func (ikb *IkBench) Run(logger *log.Logger, params *IkBenchParams) {
-	numberOfAttempts := params.NumberOfRecordsToSend / params.NumberOfRecordsSentAtOnce
+	numberOfRecordsSentAtOnce := params.NumberOfRecordsSentAtOnce
+	numberOfAttempts := params.NumberOfRecordsToSend / numberOfRecordsSentAtOnce
 	numberOfAttemptsPerProc := numberOfAttempts / params.Concurrency
 	remainder := numberOfAttempts % params.Concurrency
+	reportingFrequency := params.ReportingFrequency
+	numberOfRecordsSent := int64(0)
 	sync := make(chan int)
+	start := time.Now()
 	for i := 0; i < params.Concurrency; i += 1 {
 		r := 0
 		if i < remainder {
@@ -107,6 +123,9 @@ func (ikb *IkBench) Run(logger *log.Logger, params *IkBenchParams) {
 							}
 							break outer
 						}
+						if atomic.AddInt64(&numberOfRecordsSent, int64(numberOfRecordsSentAtOnce)) % int64(reportingFrequency) == 0 {
+							params.Reporter.ReportRecordsSent(numberOfRecordsSent, time.Now(), start)
+						}
 						break
 					}
 				}
@@ -118,6 +137,7 @@ func (ikb *IkBench) Run(logger *log.Logger, params *IkBenchParams) {
 	for i := 0; i < params.Concurrency; i += 1 {
 		<-sync
 	}
+	params.Reporter.ReportFinal(numberOfRecordsSent, time.Now(), start)
 }
 
 func NewIkBench() *IkBench {
@@ -141,6 +161,30 @@ func exitWithMessage(message string, exitStatus int) {
 
 func exitWithError(err error, exitStatus int) {
 	exitWithMessage(err.Error(), exitStatus)
+}
+
+type defaultReporter struct {
+	renderer markup.MarkupRenderer
+}
+
+func (reporter *defaultReporter) ReportRecordsSent(numberOfRecordsSent int64, now time.Time, start time.Time) {
+	elapsed := float64(now.Sub(start)) / 1e9
+	reporter.renderer.Render(&ik.Markup { []ik.MarkupChunk {
+		ik.MarkupChunk {
+			Attrs: 0,
+			Text: fmt.Sprintf("%d records sent (%.3f seconds elapsed, %.3f records per second)\n", numberOfRecordsSent, elapsed, float64(numberOfRecordsSent) / elapsed),
+		},
+	} })
+}
+
+func (reporter *defaultReporter) ReportFinal(numberOfRecordsSent int64, now time.Time, start time.Time) {
+	elapsed := float64(now.Sub(start)) / 1e9
+	reporter.renderer.Render(&ik.Markup { []ik.MarkupChunk {
+		ik.MarkupChunk {
+			Attrs: ik.Embolden | ik.Yellow,
+			Text: fmt.Sprintf("%d records sent (%.3f seconds elapsed, %.3f records per second)\n", numberOfRecordsSent, elapsed, float64(numberOfRecordsSent) / elapsed),
+		},
+	} })
 }
 
 func main() {
@@ -177,6 +221,12 @@ func main() {
 	if numberOfRecordsToSend / numberOfRecordsSentAtOnce < concurrency {
 		exitWithMessage("the value of 'concurrency' must be equal to or greater than the division of 'count' by 'multi'", 255)
 	}
+	var renderer markup.MarkupRenderer
+	if termutil.Isatty(os.Stdout.Fd()) {
+		renderer = &markup.TerminalEscapeRenderer { os.Stdout }
+	} else {
+		renderer = &markup.PlainRenderer { os.Stdout }
+	}
 	ikb := NewIkBench()
 	ikb.Run(
 		&log.Logger {},
@@ -189,6 +239,8 @@ func main() {
 			Tag: tag,
 			Data: data,
 			MaxRetryCount: 5,
+			ReportingFrequency: int(math.Max(math.Pow(10, math.Ceil(math.Log10(float64(numberOfRecordsToSend))) - 1), 100)),
+			Reporter: &defaultReporter { renderer: renderer },
 		},
 	)
 }

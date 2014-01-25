@@ -5,12 +5,8 @@ import (
 	"github.com/moriyoshi/ik"
 )
 
-type writer interface {
-	WriteString(s string) (int, error)
-}
-
 type HTMLRenderer struct {
-	Out writer
+	Out Writer
 }
 
 var supportedAttrs = []int { ik.Embolden, ik.Underlined }
