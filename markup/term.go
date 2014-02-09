@@ -17,12 +17,15 @@ func (renderer *TerminalEscapeRenderer) Render(markup *ik.Markup) {
 		codes := _codes[:0]
 		chunkAttrs := int(chunk.Attrs)
 		removedAttrs := ^chunkAttrs & appliedAttrs
-		newAttrs := chunkAttrs & ^appliedAttrs
+		if chunkAttrs & ik.White != 0 {
+			appliedAttrs &= ^ik.White
+			removedAttrs |= ik.White
+		}
+		newAttrs := chunkAttrs
 		if removedAttrs != 0 {
 			codes = append(codes, "0")
-			newAttrs |= appliedAttrs
 		}
-		if newAttrs & ik.Embolden != 0{
+		if newAttrs & ik.Embolden != 0 {
 			codes = append(codes, "1")
 		}
 		if newAttrs & ik.Underlined != 0 {
