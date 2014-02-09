@@ -28,15 +28,23 @@ type IkBench struct {
 	codec codec.MsgpackHandle
 }
 
+type IkBenchReportData struct {
+	NumberOfRecordsSent int64
+	LongestSubmissionTime time.Duration
+	ShortestSubmissionTime time.Duration
+	Now time.Time
+	Start time.Time
+}
+
 type IkBenchReporter interface {
-	ReportRecordsSent(numberOfRecordsSent int64, now time.Time, start time.Time)
-	ReportFinal(numberOfRecordsSent int64, now time.Time, start time.Time)
+	ReportRecordsSent(data IkBenchReportData)
+	ReportFinal(data IkBenchReportData)
 }
 
 type IkBenchParams struct {
 	Host string
 	Simple bool
-	NumberOfRecordsToSend int
+	NumberOfRecordsToSubmit int
 	NumberOfRecordsSentAtOnce int
 	Concurrency int
 	Tag string
@@ -56,7 +64,7 @@ func (ikb *IkBench) encodeEntryBulk(buf *bytes.Buffer, tag string, records []Rec
 	return enc.Encode([]interface{} { tag, records })
 }
 
-func (ikb *IkBench) Send(conn net.Conn, params *IkBenchParams) error {
+func (ikb *IkBench) Submit(conn net.Conn, params *IkBenchParams) error {
 	time_ := time.Now().Unix()
 	records := make([]Record, params.NumberOfRecordsSentAtOnce)
 	for i := 0; i < params.NumberOfRecordsSentAtOnce; i += 1 {
@@ -82,13 +90,16 @@ func (ikb *IkBench) Send(conn net.Conn, params *IkBenchParams) error {
 
 func (ikb *IkBench) Run(logger *log.Logger, params *IkBenchParams) {
 	numberOfRecordsSentAtOnce := params.NumberOfRecordsSentAtOnce
-	numberOfAttempts := params.NumberOfRecordsToSend / numberOfRecordsSentAtOnce
+	numberOfAttempts := params.NumberOfRecordsToSubmit / numberOfRecordsSentAtOnce
 	numberOfAttemptsPerProc := numberOfAttempts / params.Concurrency
 	remainder := numberOfAttempts % params.Concurrency
 	reportingFrequency := params.ReportingFrequency
 	numberOfRecordsSent := int64(0)
 	sync := make(chan int)
 	start := time.Now()
+	shortestSubmissionTime := time.Duration(-1)
+	longestSubmissionTime := time.Duration(-1)
+	var submissionStart time.Time
 	for i := 0; i < params.Concurrency; i += 1 {
 		r := 0
 		if i < remainder {
@@ -96,40 +107,66 @@ func (ikb *IkBench) Run(logger *log.Logger, params *IkBenchParams) {
 		}
 		go func(id int, attempts int) {
 			retryCount := params.MaxRetryCount
-			outer: for {
-				conn, err := net.Dial("tcp", params.Host)
-				if err != nil {
-					log.Print(err.Error())
-					retryCount -= 1
-					if retryCount < 0 {
-						log.Fatal("retry count exceeded") // FIXME
-					}
-					continue
-				}
-				defer conn.Close()
-				for i := 0; i < attempts; i += 1 {
-					for {
-						err = ikb.Send(conn, params)
-						if err != nil {
-							err_, ok := err.(net.Error)
-							if ok {
-								if err_.Temporary() {
-									continue
+			var conn net.Conn
+			var err error
+			defer func() {
+				if conn != nil { conn.Close() }
+			}()
+			outer: for i := 0; i < attempts; i += 1 {
+				for {
+					if conn == nil {
+						for {
+							conn, err = net.Dial("tcp", params.Host)
+							if err != nil {
+								log.Print(err.Error())
+								retryCount -= 1
+								if retryCount < 0 {
+									log.Fatal("retry count exceeded") // FIXME
 								}
-								err = conn.Close()
-								if err != nil {
-									log.Print(err.Error())
-								}
+								continue
 							}
-							break outer
+							break
 						}
-						if atomic.AddInt64(&numberOfRecordsSent, int64(numberOfRecordsSentAtOnce)) % int64(reportingFrequency) == 0 {
-							params.Reporter.ReportRecordsSent(numberOfRecordsSent, time.Now(), start)
-						}
-						break
 					}
+					if submissionStart.IsZero() {
+						submissionStart = time.Now()
+					}
+					err = ikb.Submit(conn, params)
+					if err != nil {
+						err_, ok := err.(net.Error)
+						if ok {
+							if err_.Temporary() {
+								continue
+							}
+							err = conn.Close()
+							if err != nil {
+								log.Print(err.Error())
+							}
+							conn = nil
+						}
+						log.Fatal(err.Error()) // FIXME
+						break outer
+					}
+					now := time.Now()
+					submissionTime := now.Sub(submissionStart)
+					submissionStart = now
+					if shortestSubmissionTime < 0 || shortestSubmissionTime > submissionTime {
+						shortestSubmissionTime = submissionTime
+					}
+					if longestSubmissionTime < submissionTime {
+						longestSubmissionTime = submissionTime
+					}
+					if atomic.AddInt64(&numberOfRecordsSent, int64(numberOfRecordsSentAtOnce)) % int64(reportingFrequency) == 0 {
+						params.Reporter.ReportRecordsSent(IkBenchReportData {
+							NumberOfRecordsSent: numberOfRecordsSent,
+							ShortestSubmissionTime: shortestSubmissionTime,
+							LongestSubmissionTime: longestSubmissionTime,
+							Now: now,
+							Start: start,
+						})
+					}
+					break
 				}
-				break
 			}
 			sync <- id
 		}(i, numberOfAttemptsPerProc + r)
@@ -137,7 +174,13 @@ func (ikb *IkBench) Run(logger *log.Logger, params *IkBenchParams) {
 	for i := 0; i < params.Concurrency; i += 1 {
 		<-sync
 	}
-	params.Reporter.ReportFinal(numberOfRecordsSent, time.Now(), start)
+	params.Reporter.ReportFinal(IkBenchReportData {
+		NumberOfRecordsSent: numberOfRecordsSent,
+		ShortestSubmissionTime: shortestSubmissionTime,
+		LongestSubmissionTime: longestSubmissionTime,
+		Now: time.Now(),
+		Start: start,
+	})
 }
 
 func NewIkBench() *IkBench {
@@ -167,22 +210,66 @@ type defaultReporter struct {
 	renderer markup.MarkupRenderer
 }
 
-func (reporter *defaultReporter) ReportRecordsSent(numberOfRecordsSent int64, now time.Time, start time.Time) {
-	elapsed := float64(now.Sub(start)) / 1e9
+func (reporter *defaultReporter) ReportRecordsSent(data IkBenchReportData) {
+	elapsed := float64(data.Now.Sub(data.Start)) / 1e9
 	reporter.renderer.Render(&ik.Markup { []ik.MarkupChunk {
 		ik.MarkupChunk {
 			Attrs: 0,
-			Text: fmt.Sprintf("%d records sent (%.3f seconds elapsed, %.3f records per second)\n", numberOfRecordsSent, elapsed, float64(numberOfRecordsSent) / elapsed),
+			Text: fmt.Sprintf("%d records sent (%.3f seconds elapsed, %.3f records per second)\n", data.NumberOfRecordsSent, elapsed, float64(data.NumberOfRecordsSent) / elapsed),
 		},
 	} })
 }
 
-func (reporter *defaultReporter) ReportFinal(numberOfRecordsSent int64, now time.Time, start time.Time) {
-	elapsed := float64(now.Sub(start)) / 1e9
+func (reporter *defaultReporter) ReportFinal(data IkBenchReportData) {
+	elapsed := float64(data.Now.Sub(data.Start)) / 1e9
 	reporter.renderer.Render(&ik.Markup { []ik.MarkupChunk {
 		ik.MarkupChunk {
 			Attrs: ik.Embolden | ik.Yellow,
-			Text: fmt.Sprintf("%d records sent (%.3f seconds elapsed, %.3f records per second)\n", numberOfRecordsSent, elapsed, float64(numberOfRecordsSent) / elapsed),
+			Text: "Benchmark Duration: ",
+		},
+		ik.MarkupChunk {
+			Attrs: ik.Embolden,
+			Text: fmt.Sprintf("%.3f seconds\n", elapsed),
+		},
+		ik.MarkupChunk {
+			Attrs: ik.Embolden | ik.Yellow,
+			Text: "Number of Records Submitted: ",
+		},
+		ik.MarkupChunk {
+			Attrs: ik.Embolden,
+			Text: fmt.Sprintf("%d\n", data.NumberOfRecordsSent),
+		},
+		ik.MarkupChunk {
+			Attrs: ik.Embolden | ik.Yellow,
+			Text: "Records per Second: ",
+		},
+		ik.MarkupChunk {
+			Attrs: ik.Embolden,
+			Text: fmt.Sprintf("%.3f\n", float64(data.NumberOfRecordsSent) / elapsed),
+		},
+		ik.MarkupChunk {
+			Attrs: ik.Embolden | ik.Yellow,
+			Text: "Average Submission Time: ",
+		},
+		ik.MarkupChunk {
+			Attrs: ik.Embolden,
+			Text: fmt.Sprintf("%.10f seconds\n", elapsed / float64(data.NumberOfRecordsSent)),
+		},
+		ik.MarkupChunk {
+			Attrs: ik.Embolden,
+			Text: "    Shortest: ",
+		},
+		ik.MarkupChunk {
+			Attrs: ik.Embolden,
+			Text: fmt.Sprintf("%.10f seconds\n", float64(data.ShortestSubmissionTime) / 1e9),
+		},
+		ik.MarkupChunk {
+			Attrs: ik.Embolden,
+			Text: "    Longest: ",
+		},
+		ik.MarkupChunk {
+			Attrs: ik.Embolden,
+			Text: fmt.Sprintf("%.10f seconds\n", float64(data.LongestSubmissionTime) / 1e9),
 		},
 	} })
 }
@@ -190,7 +277,7 @@ func (reporter *defaultReporter) ReportFinal(numberOfRecordsSent int64, now time
 func main() {
 	var host string
 	var simple bool
-	var numberOfRecordsToSend int
+	var numberOfRecordsToSubmit int
 	var numberOfRecordsSentAtOnce int
 	var concurrency int
 	var tag string
@@ -206,7 +293,7 @@ func main() {
 		usage()
 	}
 	tag = args[0]
-	numberOfRecordsToSend, err := strconv.Atoi(args[1])
+	numberOfRecordsToSubmit, err := strconv.Atoi(args[1])
 	if err != nil {
 		exitWithError(err, 255)
 	}
@@ -215,10 +302,10 @@ func main() {
 	if err != nil {
 		exitWithError(err, 255)
 	}
-	if numberOfRecordsToSend % numberOfRecordsSentAtOnce != 0 {
+	if numberOfRecordsToSubmit % numberOfRecordsSentAtOnce != 0 {
 		exitWithMessage("the value of 'count' must be a multiple of 'multi'", 255)
 	}
-	if numberOfRecordsToSend / numberOfRecordsSentAtOnce < concurrency {
+	if numberOfRecordsToSubmit / numberOfRecordsSentAtOnce < concurrency {
 		exitWithMessage("the value of 'concurrency' must be equal to or greater than the division of 'count' by 'multi'", 255)
 	}
 	var renderer markup.MarkupRenderer
@@ -233,13 +320,13 @@ func main() {
 		&IkBenchParams {
 			Host: host,
 			Simple: simple,
-			NumberOfRecordsToSend: numberOfRecordsToSend,
+			NumberOfRecordsToSubmit: numberOfRecordsToSubmit,
 			NumberOfRecordsSentAtOnce: numberOfRecordsSentAtOnce,
 			Concurrency: concurrency,
 			Tag: tag,
 			Data: data,
 			MaxRetryCount: 5,
-			ReportingFrequency: int(math.Max(math.Pow(10, math.Ceil(math.Log10(float64(numberOfRecordsToSend))) - 1), 100)),
+			ReportingFrequency: int(math.Max(math.Pow(10, math.Ceil(math.Log10(float64(numberOfRecordsToSubmit))) - 1), 100)),
 			Reporter: &defaultReporter { renderer: renderer },
 		},
 	)
