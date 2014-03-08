@@ -138,9 +138,9 @@ func (ikb *IkBench) Run(logger *log.Logger, params *IkBenchParams) {
 							if err_.Temporary() {
 								continue
 							}
-							err = conn.Close()
-							if err != nil {
-								log.Print(err.Error())
+							closeErr:= conn.Close()
+							if closeErr != nil {
+								log.Print(closeErr.Error())
 							}
 							conn = nil
 						}
