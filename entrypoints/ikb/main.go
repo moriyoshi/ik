@@ -144,7 +144,7 @@ func (ikb *IkBench) Run(logger *log.Logger, params *IkBenchParams) {
 							}
 							conn = nil
 						}
-						log.Fatal(err.Error()) // FIXME
+						log.Print(err.Error()) // FIXME
 						break outer
 					}
 					now := time.Now()
