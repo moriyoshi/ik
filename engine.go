@@ -2,10 +2,12 @@ package ik
 
 import (
 	"log"
+	"math/rand"
 )
 
 type engineImpl struct {
 	logger          *log.Logger
+	randSource	rand.Source
 	scorekeeper     *Scorekeeper
 	defaultPort     Port
 	spawner         *Spawner
@@ -14,6 +16,10 @@ type engineImpl struct {
 
 func (engine *engineImpl) Logger() *log.Logger {
 	return engine.logger
+}
+
+func (engine *engineImpl) RandSource() rand.Source {
+	return engine.randSource
 }
 
 func (engine *engineImpl) Scorekeeper() *Scorekeeper {
@@ -74,6 +80,7 @@ func (engine *engineImpl) Start() error {
 func NewEngine(logger *log.Logger, scorekeeper *Scorekeeper, defaultPort Port) *engineImpl {
 	engine := &engineImpl{
 		logger:          logger,
+		randSource:      NewRandSourceWithTimestampSeed(),
 		scorekeeper:     scorekeeper,
 		defaultPort:     defaultPort,
 		spawner:         NewSpawner(),

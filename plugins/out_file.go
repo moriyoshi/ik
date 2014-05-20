@@ -2,33 +2,42 @@ package plugins
 
 import (
 	"github.com/moriyoshi/ik"
+	jnl "github.com/moriyoshi/ik/journal"
 	"io"
-	"bufio"
 	"strconv"
+	"math/rand"
 	"compress/gzip"
 	"os"
 	"fmt"
 	"log"
 	"time"
+	"path"
 	"errors"
+	"strings"
 	"encoding/json"
 	strftime "github.com/jehiah/go-strftime"
 )
 
-type FlushableWriter interface {
-	io.Writer
-	Flush() error
-}
-
 type FileOutput struct {
 	factory *FileOutputFactory
 	logger  *log.Logger
-	out FlushableWriter
-	closer func() error
+	pathPrefix string
+	pathSuffix string
+	symlinkPath string
+	permission os.FileMode
+	compressionFormat int
+	journalGroup ik.JournalGroup
+	slicer *ik.Slicer
 	timeFormat string
+	timeSliceFormat string
 	location *time.Location
 	c chan []ik.FluentRecordSet
 	cancel chan bool
+	disableDraining bool
+}
+
+type FileOutputPacker struct {
+	output *FileOutput
 }
 
 type FileOutputFactory struct {
@@ -38,6 +47,19 @@ const (
 	compressionNone = 0
 	compressionGzip = 1
 )
+
+func (packer *FileOutputPacker) Pack(record ik.FluentRecord) ([]byte, error) {
+	formattedData, err := packer.output.formatData(record.Data)
+	if err != nil {
+		return nil, err
+	}
+	return ([]byte)(fmt.Sprintf(
+		"%s\t%s\t%s\n",
+		packer.output.formatTime(record.Timestamp),
+		record.Tag,
+		formattedData,
+	)), nil
+}
 
 func (output *FileOutput) formatTime(timestamp uint64) string {
 	timestamp_ := time.Unix(int64(timestamp), 0)
@@ -70,22 +92,7 @@ func (output *FileOutput) Run() error {
 	case <- output.cancel:
 		return nil
 	case recordSets := <-output.c:
-		for _, recordSet := range recordSets {
-			for _, record := range recordSet.Records {
-				formattedData, err := output.formatData(record.Data)
-				if err != nil {
-					return err
-				}
-				fmt.Fprintf(
-					output.out,
-					"%s\t%s\t%s\n",
-					output.formatTime(record.Timestamp),
-					recordSet.Tag,
-					formattedData,
-				)
-			}
-		}
-		err := output.out.Flush()
+		err := output.slicer.Emit(recordSets)
 		if err != nil {
 			return err
 		}
@@ -95,60 +102,182 @@ func (output *FileOutput) Run() error {
 
 func (output *FileOutput) Shutdown() error {
 	output.cancel <- true
-	return output.closer()
+	return output.journalGroup.Dispose()
 }
 
 func (output *FileOutput) Dispose() {
 	output.Shutdown()
 }
 
-func newFileOutput(factory *FileOutputFactory, logger *log.Logger, path string, timeFormat string, compressionFormat int, symlinkPath string, permission os.FileMode) (*FileOutput, error) {
-	var out FlushableWriter
-	var closer func() error
-	fout, err := os.OpenFile(path, os.O_RDWR | os.O_CREATE | os.O_APPEND, permission)
+func buildNextPathName(key string, pathPrefix string, pathSuffix string, suffix string) (string, error) {
+	i := 0
+	var path_ string
+	for {
+		path_ = fmt.Sprintf(
+			"%s%s_%d%s%s",
+			pathPrefix,
+			key,
+			i,
+			pathSuffix,
+			suffix,
+		)
+		_, err := os.Stat(path_)
+		if err != nil {
+			if os.IsNotExist(err) {
+				err = nil
+				break
+			} else {
+				return "", err
+			}
+		}
+		i += 1
+	}
+	dir := path.Dir(path_)
+	err := os.MkdirAll(dir, os.FileMode(os.ModePerm))
 	if err != nil {
-		logger.Print("Failed to open " + path)
-		return nil, err
+		return "", err
 	}
-	if compressionFormat == compressionGzip {
-		gzipout := gzip.NewWriter(fout)
-		out = gzipout
-		closer = func() error {
-			err1 := gzipout.Close()
-			err2 := fout.Close()
-			if err2 != nil {
-				if err1 != nil {
-					logger.Print("ignored error: " + err1.Error())
-				}
-				return err2
+	return path_, nil
+}
+
+func (output *FileOutput) flush(key string, chunk ik.JournalChunk) error {
+	suffix := ""
+	if output.compressionFormat == compressionGzip {
+		suffix = ".gz"
+	}
+	outPath, err := buildNextPathName(
+		key,
+		output.pathPrefix,
+		output.pathSuffix,
+		suffix,
+	)
+	if err != nil {
+		return err
+	}
+	var writer io.WriteCloser
+	writer, err = os.OpenFile(outPath, os.O_CREATE | os.O_EXCL | os.O_WRONLY, output.permission)
+	if err != nil {
+		return err
+	}
+	defer writer.Close()
+
+	if output.compressionFormat == compressionGzip {
+		writer = gzip.NewWriter(writer)
+		defer writer.Close()
+	}
+
+	reader, err := chunk.GetReader()
+	closer, _ := reader.(io.Closer)
+	if closer != nil {
+		defer closer.Close()
+	}
+	if err != nil {
+		return err
+	}
+	_, err = io.Copy(writer, reader)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (output *FileOutput) attachListeners(journal ik.Journal) {
+	if output.symlinkPath != "" {
+		journal.AddNewChunkListener(func (chunk ik.JournalChunk) error {
+			defer chunk.Dispose()
+			wrapper, ok := chunk.(*jnl.FileJournalChunkWrapper)
+			if !ok {
+				return nil
 			}
-			if err1 != nil {
-				return err1
+			err := os.Remove(output.symlinkPath)
+			if err != nil && !os.IsNotExist(err) {
+				return err
+			} else {
+				err = os.Symlink(output.symlinkPath, wrapper.Path())
 			}
-			return nil
-		}
-	} else {
-		out = bufio.NewWriter(fout)
-		closer = func() error {
-			return fout.Close()
-		}
+			if err != nil {
+				output.logger.Print("Failed to create symbolic link " + output.symlinkPath)
+			}
+			return err
+		})
 	}
-	if symlinkPath != "" {
-		err := os.Symlink(symlinkPath, path)
-		if err == nil {
-			logger.Print("Failed to create symbolic link " + symlinkPath)
-		}
+	journal.AddFlushListener(func (chunk ik.JournalChunk) error {
+		defer chunk.Dispose()
+		chunk.TakeOwnership()
+		return output.flush(journal.Key(), chunk)
+	})
+}
+
+func newFileOutput(factory *FileOutputFactory, logger *log.Logger, randSource rand.Source, pathPrefix string, pathSuffix string, timeFormat string, compressionFormat int, symlinkPath string, permission os.FileMode, bufferChunkLimit int64, timeSliceFormat string, disableDraining bool) (*FileOutput, error) {
+	if timeSliceFormat == "" {
+		timeSliceFormat = "%Y%m%d"
 	}
-	return &FileOutput {
+	journalGroupFactory := jnl.NewFileJournalGroupFactory(
+		logger,
+		randSource,
+		func () time.Time { return time.Now() },
+		pathSuffix,
+		permission,
+		bufferChunkLimit,
+	)
+	retval := &FileOutput {
 		factory: factory,
 		logger:  logger,
-		out: out,
-		closer: closer,
+		pathPrefix: pathPrefix,
+		pathSuffix: pathSuffix,
+		symlinkPath: symlinkPath,
+		permission: permission,
+		compressionFormat: compressionFormat,
 		timeFormat: timeFormat,
+		timeSliceFormat: timeSliceFormat,
 		location: time.UTC,
 		c: make(chan []ik.FluentRecordSet, 100 /* FIXME */),
 		cancel: make(chan bool),
-	}, nil
+		disableDraining: disableDraining,
+	}
+	journalGroup, err := journalGroupFactory.GetJournalGroup(pathPrefix, retval)
+	if err != nil {
+		return nil, err
+	}
+
+	slicer := ik.NewSlicer(
+		journalGroup,
+		func (record ik.FluentRecord) string {
+			timestamp_ := time.Unix(int64(record.Timestamp), 0)
+			return strftime.Format(retval.timeSliceFormat, timestamp_)
+		},
+		&FileOutputPacker { retval },
+		logger,
+	)
+	slicer.AddNewKeyEventListener(func (last ik.Journal, next ik.Journal) error {
+		err := (error)(nil)
+		if last != nil {
+			err = last.Flush(func (chunk ik.JournalChunk) error {
+				defer chunk.Dispose()
+				chunk.TakeOwnership()
+				return retval.flush(last.Key(), chunk)
+			})
+		}
+		if next != nil {
+			if !retval.disableDraining {
+				retval.attachListeners(next)
+			}
+		}
+		return err
+	})
+	retval.journalGroup = journalGroup
+	retval.slicer = slicer
+	if !disableDraining {
+		currentKey := strftime.Format(timeSliceFormat, time.Now())
+		for _, key := range journalGroup.GetJournalKeys() {
+			if key == currentKey {
+				journal := journalGroup.GetJournal(key)
+				retval.attachListeners(journal)
+				journal.Flush(nil)
+			}
+		}
+	}
+	return retval, nil
 }
 
 func (factory *FileOutputFactory) Name() string {
@@ -156,12 +285,20 @@ func (factory *FileOutputFactory) Name() string {
 }
 
 func (factory *FileOutputFactory) New(engine ik.Engine, config *ik.ConfigElement) (ik.Output, error) {
-	path := ""
+	pathPrefix := ""
+	pathSuffix := ""
 	timeFormat := ""
 	compressionFormat := compressionNone
 	symlinkPath := ""
 	permission := 0666
-	path, _ = config.Attrs["path"]
+	bufferChunkLimit := int64(8 * 1024 * 1024) // 8MB
+	timeSliceFormat := ""
+	disableDraining := false
+
+	path, ok := config.Attrs["path"]
+	if !ok {
+		return nil, errors.New("'path' parameter is required on file output")
+	}
 	timeFormat, _ = config.Attrs["time_format"]
 	compressionFormatStr, ok := config.Attrs["compress"]
 	if ok {
@@ -180,14 +317,47 @@ func (factory *FileOutputFactory) New(engine ik.Engine, config *ik.ConfigElement
 			return nil, err
 		}
 	}
+	pos := strings.Index(path, "*")
+	if pos >= 0 {
+		pathPrefix = path[0:pos]
+		pathSuffix = path[pos + 1:]
+	} else {
+		pathPrefix = path + "."
+		pathSuffix = ".log"
+	}
+	timeSliceFormat, _ = config.Attrs["time_slice_format"]
+
+	bufferChunkLimitStr, ok := config.Attrs["buffer_chunk_limit"]
+	if ok {
+		var err error
+		bufferChunkLimit, err = ik.ParseCapacityString(bufferChunkLimitStr)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	disableDrainingStr, ok := config.Attrs["disable_draining"]
+	if ok {
+		var err error
+		disableDraining, err = strconv.ParseBool(disableDrainingStr)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	return newFileOutput(
 		factory,
 		engine.Logger(),
-		path,
+		engine.RandSource(),
+		pathPrefix,
+		pathSuffix,
 		timeFormat,
 		compressionFormat,
 		symlinkPath,
 		os.FileMode(permission),
+		bufferChunkLimit,
+		timeSliceFormat,
+		disableDraining,
 	)
 }
 

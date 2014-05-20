@@ -1,6 +1,10 @@
 package ik
 
-import "log"
+import (
+	"log"
+	"io"
+	"math/rand"
+)
 
 type FluentRecord struct {
 	Tag       string
@@ -90,6 +94,7 @@ type ScorekeeperTopic struct {
 type Engine interface {
 	Disposable
 	Logger() *log.Logger
+	RandSource() rand.Source
 	Scorekeeper() *Scorekeeper
 	DefaultPort() Port
 	Spawn(Spawnee) error
@@ -129,4 +134,37 @@ type Scoreboard interface {
 type ScoreboardFactory interface {
 	Plugin
 	New(engine Engine, pluginRegistry PluginRegistry, config *ConfigElement) (Scoreboard, error)
+}
+
+type JournalChunk interface {
+	GetReader() (io.Reader, error)
+	GetNextChunk() JournalChunk
+	TakeOwnership() bool
+	Dispose() error
+}
+
+type JournalChunkListener func (JournalChunk) error
+
+type Journal interface {
+	Key() string
+	Write(data []byte) error
+	GetTailChunk() JournalChunk
+	AddNewChunkListener(JournalChunkListener)
+	AddFlushListener(JournalChunkListener)
+	Flush(func (JournalChunk) error) error
+	Dispose() error
+}
+
+type JournalGroup interface {
+	GetJournal(key string) Journal
+	GetJournalKeys() []string
+	Dispose() error
+}
+
+type JournalGroupFactory interface {
+	GetJournalGroup() JournalGroup
+}
+
+type RecordPacker interface {
+	Pack(record FluentRecord) ([]byte, error)
 }
