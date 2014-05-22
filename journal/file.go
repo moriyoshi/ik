@@ -148,9 +148,11 @@ func (journal *FileJournal) deleteRefInner(chunk *FileJournalChunk, inner bool) 
 			}
 			// increment the refcount of the last chunk
 			// to rehold the reference
-			prevChunk = chunk.head.prev
-			if prevChunk != nil {
-				atomic.AddInt32(&prevChunk.refcount, 1)
+			if !inner {
+				prevChunk = chunk.head.prev
+				if prevChunk != nil {
+					atomic.AddInt32(&prevChunk.refcount, 1)
+				}
 			}
 		}
 		err := os.Remove(chunk.Path)
