@@ -675,7 +675,7 @@ func (factory *FileJournalGroupFactory) GetJournalGroup(path string, pluginInsta
 			journalGroup.Dispose()
 			return nil, err
 		}
-		position, err := file.Seek(0, os.SEEK_CUR)
+		position, err := file.Seek(0, os.SEEK_END)
 		if err != nil {
 			file.Close()
 			journalGroup.Dispose()
