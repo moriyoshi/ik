@@ -119,11 +119,23 @@ func (wrapper *FileJournalChunkWrapper) TakeOwnership() bool {
 }
 
 func (wrapper *FileJournalChunkWrapper) Dispose() error {
-	chunk := atomic.SwapPointer((*unsafe.Pointer)((unsafe.Pointer)(&wrapper.chunk)), nil)
+	chunk := (*FileJournalChunk)(atomic.SwapPointer((*unsafe.Pointer)((unsafe.Pointer)(&wrapper.chunk)), nil))
 	if chunk == nil {
 		return errors.New("already disposed")
 	}
-	return wrapper.journal.deleteRef((*FileJournalChunk)(chunk))
+	err, destroyed := wrapper.journal.deleteRef((*FileJournalChunk)(chunk))
+	if err != nil {
+		return err
+	}
+	if destroyed && wrapper.ownershipTaken != 0 && chunk.head.next == nil {
+		// increment the refcount of the last chunk
+		// to rehold the reference
+		prevChunk := chunk.head.prev
+		if prevChunk != nil {
+			atomic.AddInt32(&prevChunk.refcount, 1)
+		}
+	}
+	return nil
 }
 
 func (journal *FileJournal) newChunkWrapper(chunk *FileJournalChunk) *FileJournalChunkWrapper {
@@ -131,35 +143,23 @@ func (journal *FileJournal) newChunkWrapper(chunk *FileJournalChunk) *FileJourna
 	return &FileJournalChunkWrapper { journal, chunk, 0 }
 }
 
-func (journal *FileJournal) deleteRef(chunk *FileJournalChunk) error {
-	return journal.deleteRefInner(chunk, false)
-}
-
-func (journal *FileJournal) deleteRefInner(chunk *FileJournalChunk, inner bool) error {
+func (journal *FileJournal) deleteRef(chunk *FileJournalChunk) (error, bool) {
 	refcount := atomic.AddInt32(&chunk.refcount, -1)
 	if refcount == 0 {
 		// first propagate to newer chunk
 		if prevChunk := chunk.head.prev; prevChunk != nil {
-			err := journal.deleteRefInner(prevChunk, true)
+			err, _ := journal.deleteRef(prevChunk)
 			if err != nil {
 				// undo the change
 				atomic.AddInt32(&chunk.refcount, 1)
-				return err
-			}
-			// increment the refcount of the last chunk
-			// to rehold the reference
-			if !inner {
-				prevChunk = chunk.head.prev
-				if prevChunk != nil {
-					atomic.AddInt32(&prevChunk.refcount, 1)
-				}
+				return err, false
 			}
 		}
 		err := os.Remove(chunk.Path)
 		if err != nil {
 			// undo the change
 			atomic.AddInt32(&chunk.refcount, 1)
-			return err
+			return err, false
 		}
 		{
 			journal.chunks.mtx.Lock()
@@ -178,11 +178,12 @@ func (journal *FileJournal) deleteRefInner(chunk *FileJournalChunk, inner bool) 
 			journal.chunks.count -= 1
 			journal.chunks.mtx.Unlock()
 		}
+		return nil, true
 	} else if refcount < 0 {
 		// should never happen
 		panic(fmt.Sprintf("something went wrong! chunk=%v, chunks.count=%d", chunk, journal.chunks.count))
 	}
-	return nil
+	return nil, false
 }
 
 func (chunk *FileJournalChunk) getReader() (io.Reader, error) {
@@ -242,7 +243,7 @@ func (journal *FileJournal) Purge() error {
 	}
 	// initiate GC
 	if lastChunk != nil {
-		err := journal.deleteRef(lastChunk)
+		err, _ := journal.deleteRef(lastChunk)
 		if err != nil {
 			return err
 		}
@@ -333,7 +334,7 @@ func (journal *FileJournal) newChunk() (*FileJournalChunk, error) {
 			os.Remove(chunk.Path)
 			return nil, err
 		}
-		err = journal.deleteRef(oldHead) // writer-holding ref
+		err, _ = journal.deleteRef(oldHead) // writer-holding ref
 		if err != nil {
 			file.Close()
 			os.Remove(chunk.Path)
