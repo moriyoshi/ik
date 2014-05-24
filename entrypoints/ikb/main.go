@@ -118,10 +118,10 @@ func (ikb *IkBench) Run(logger *log.Logger, params *IkBenchParams) {
 						for {
 							conn, err = net.Dial("tcp", params.Host)
 							if err != nil {
-								log.Print(err.Error())
+								logger.Print(err.Error())
 								retryCount -= 1
 								if retryCount < 0 {
-									log.Fatal("retry count exceeded") // FIXME
+									logger.Fatal("retry count exceeded") // FIXME
 								}
 								continue
 							}
@@ -140,11 +140,11 @@ func (ikb *IkBench) Run(logger *log.Logger, params *IkBenchParams) {
 							}
 							closeErr:= conn.Close()
 							if closeErr != nil {
-								log.Print(closeErr.Error())
+								logger.Print(closeErr.Error())
 							}
 							conn = nil
 						}
-						log.Print(err.Error()) // FIXME
+						logger.Print(err.Error()) // FIXME
 						break outer
 					}
 					now := time.Now()
