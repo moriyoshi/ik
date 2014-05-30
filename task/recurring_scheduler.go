@@ -33,6 +33,7 @@ const (
 	Update
 	TryPop
 	Delete
+	NoOp
 )
 
 const (
@@ -422,6 +423,10 @@ func (sched *RecurringTaskScheduler) RunNext() (time.Duration, TaskStatus, error
 	return time.Duration(0), taskStatus, err
 }
 
+func (sched *RecurringTaskScheduler) NoOp() {
+	sched.daemonChan <- RecurringTaskDaemonCommand { NoOp, nil, time.Time {}, nil }
+}
+
 func (sched *RecurringTaskScheduler) ProcessEvent() {
 	cmd := <-sched.daemonChan
 	switch cmd.command {
@@ -444,6 +449,8 @@ func (sched *RecurringTaskScheduler) ProcessEvent() {
 		cmd.result <- RecurringTaskDaemonCommandResult { descr, diff }
 	case Delete:
 		(&sched.pQueue).delete(cmd.descriptor)
+	case NoOp:
+		// do nothing
 	default:
 		panic("WTF!")
 	}

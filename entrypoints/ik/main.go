@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/moriyoshi/ik"
 	"github.com/moriyoshi/ik/plugins"
+	"github.com/moriyoshi/ik/parsers"
 	"log"
 	"os"
 	"path"
@@ -74,11 +75,18 @@ func main() {
 		}
 	}
 
+	for _, _plugin := range parsers.GetPlugins() {
+		registry.RegisterLineParserPlugin(_plugin)
+	}
+
 	registry.RegisterScoreboardFactory(&HTMLHTTPScoreboardFactory {})
 
 	router := ik.NewFluentRouter()
-	engine := ik.NewEngine(logger, scorekeeper, router)
-	defer engine.Dispose()
+	engine := ik.NewEngine(logger, opener, registry, scorekeeper, router)
+	defer func () {
+		err := engine.Dispose()
+		engine.Logger().Println(err.Error())
+	}()
 
 	err = ik.NewFluentConfigurer(logger, registry, registry, router).Configure(engine, config)
 	if err != nil {

@@ -4,6 +4,8 @@ import (
 	"log"
 	"io"
 	"math/rand"
+	"net/http"
+	"github.com/moriyoshi/ik/task"
 )
 
 type FluentRecord struct {
@@ -75,7 +77,7 @@ type ScoreValueFetcher interface {
 }
 
 type Disposable interface {
-	Dispose()
+	Dispose() error
 }
 
 type Plugin interface {
@@ -91,9 +93,17 @@ type ScorekeeperTopic struct {
 	Fetcher ScoreValueFetcher
 }
 
+type Opener interface {
+	FileSystem() http.FileSystem
+	BasePath() string
+	NewOpener(path string) Opener
+}
+
 type Engine interface {
 	Disposable
 	Logger() *log.Logger
+	Opener() Opener
+	LineParserPluginRegistry() LineParserPluginRegistry
 	RandSource() rand.Source
 	Scorekeeper() *Scorekeeper
 	DefaultPort() Port
@@ -101,6 +111,7 @@ type Engine interface {
 	Launch(PluginInstance) error
 	SpawneeStatuses() ([]SpawneeStatus, error)
 	PluginInstances() []PluginInstance
+	RecurringTaskScheduler() *task.RecurringTaskScheduler
 }
 
 type InputFactory interface {
@@ -137,28 +148,28 @@ type ScoreboardFactory interface {
 }
 
 type JournalChunk interface {
+	Disposable
 	GetReader() (io.Reader, error)
 	GetNextChunk() JournalChunk
 	TakeOwnership() bool
-	Dispose() error
 }
 
 type JournalChunkListener func (JournalChunk) error
 
 type Journal interface {
+	Disposable
 	Key() string
 	Write(data []byte) error
 	GetTailChunk() JournalChunk
 	AddNewChunkListener(JournalChunkListener)
 	AddFlushListener(JournalChunkListener)
 	Flush(func (JournalChunk) error) error
-	Dispose() error
 }
 
 type JournalGroup interface {
+	Disposable
 	GetJournal(key string) Journal
 	GetJournalKeys() []string
-	Dispose() error
 }
 
 type JournalGroupFactory interface {
@@ -168,3 +179,24 @@ type JournalGroupFactory interface {
 type RecordPacker interface {
 	Pack(record FluentRecord) ([]byte, error)
 }
+
+type LineParser interface {
+	Feed(line string) error
+}
+
+type LineParserFactory interface {
+	New(receiver func (FluentRecord) error) (LineParser, error)
+}
+
+type LineParserFactoryFactory func (engine Engine, config *ConfigElement) (LineParserFactory, error)
+
+type LineParserPlugin interface {
+	Name() string
+	OnRegistering(func (name string, factory LineParserFactoryFactory) error) error
+}
+
+type LineParserPluginRegistry interface {
+	RegisterLineParserPlugin(plugin LineParserPlugin) error
+	LookupLineParserFactoryFactory(name string) LineParserFactoryFactory
+}
+
