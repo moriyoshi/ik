@@ -268,7 +268,8 @@ func newForwardInput(factory *ForwardInputFactory, logger *log.Logger, engine ik
 
 func (factory *ForwardInputFactory) Name() string {
 	return "forward"
-} 
+}
+
 func (factory *ForwardInputFactory) New(engine ik.Engine, config *ik.ConfigElement) (ik.Input, error) {
 	listen, ok := config.Attrs["listen"]
 	if !ok {

@@ -11,6 +11,8 @@ type MultiFactoryRegistry struct {
 	inputFactories      map[string]ik.InputFactory
 	outputFactories     map[string]ik.OutputFactory
 	scoreboardFactories map[string]ik.ScoreboardFactory
+	lineParserPlugins   map[string]ik.LineParserPlugin
+	lineParserFactoryFactories map[string]ik.LineParserFactoryFactory
 	plugins             []ik.Plugin
 }
 
@@ -71,6 +73,34 @@ func (registry *MultiFactoryRegistry) LookupScoreboardFactory(name string) ik.Sc
 	return factory
 }
 
+func (registry *MultiFactoryRegistry) RegisterLineParserPlugin(plugin ik.LineParserPlugin) error {
+	_, alreadyExists := registry.lineParserPlugins[plugin.Name()]
+	if alreadyExists {
+		return errors.New(fmt.Sprintf("LineParserPlugin named %s already registered", plugin.Name()))
+	}
+	err := plugin.OnRegistering(func (name string, factory ik.LineParserFactoryFactory) error {
+		_, alreadyExists := registry.lineParserFactoryFactories[name]
+		if alreadyExists {
+			return errors.New(fmt.Sprintf("LineParserFactoryFactory named %s already registered", name))
+		}
+		registry.lineParserFactoryFactories[name] = factory
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	registry.lineParserPlugins[plugin.Name()] = plugin
+	return nil
+}
+
+func (registry *MultiFactoryRegistry) LookupLineParserFactoryFactory(name string) ik.LineParserFactoryFactory {
+	factory, ok := registry.lineParserFactoryFactories[name]
+	if !ok {
+		return nil
+	}
+	return factory
+}
+
 func (registry *MultiFactoryRegistry) Plugins() []ik.Plugin {
 	retval := make([]ik.Plugin, len(registry.plugins))
 	copy(retval, registry.plugins)
@@ -83,5 +113,7 @@ func NewMultiFactoryRegistry(scorekeeper *ik.Scorekeeper) *MultiFactoryRegistry 
 		inputFactories:  make(map[string]ik.InputFactory),
 		outputFactories: make(map[string]ik.OutputFactory),
 		scoreboardFactories: make(map[string]ik.ScoreboardFactory),
+		lineParserPlugins: make(map[string]ik.LineParserPlugin),
+		lineParserFactoryFactories: make(map[string]ik.LineParserFactoryFactory),
 	}
 }

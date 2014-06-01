@@ -31,13 +31,6 @@ type LineReader interface {
 	LineNumber() int
 }
 
-type Opener interface {
-	FileSystem() http.FileSystem
-	BasePath() string
-	NewOpener(path string) Opener
-	NewLineReader(filename string) (LineReader, error)
-}
-
 type parserContext struct {
 	tag     string
 	tagArgs string
@@ -116,7 +109,7 @@ func (opener DefaultOpener) NewOpener(path_ string) Opener {
 	return DefaultOpener(path_)
 }
 
-func (opener DefaultOpener) NewLineReader(filename string) (LineReader, error) {
+func NewLineReader(opener Opener, filename string) (LineReader, error) {
 	file, err := opener.FileSystem().Open(filename)
 	if err != nil {
 		return nil, err
@@ -164,7 +157,7 @@ func handleInclude(reader LineReader, context *parserContext, attrValue string) 
 			return err
 		}
 		for _, file := range files {
-			newReader, err := context.opener.NewLineReader(file)
+			newReader, err := NewLineReader(context.opener, file)
 			if err != nil {
 				return err
 			}
@@ -236,7 +229,7 @@ func parseConfig(reader LineReader, context *parserContext) error {
 
 func ParseConfig(opener Opener, filename string) (*Config, error) {
 	context := makeParserContext("(root)", "", opener)
-	reader, err := opener.NewLineReader(filename)
+	reader, err := NewLineReader(opener, filename)
 	if err != nil {
 		return nil, err
 	}
