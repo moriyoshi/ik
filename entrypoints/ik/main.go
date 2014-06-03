@@ -85,7 +85,9 @@ func main() {
 	engine := ik.NewEngine(logger, opener, registry, scorekeeper, router)
 	defer func () {
 		err := engine.Dispose()
-		engine.Logger().Println(err.Error())
+		if err != nil {
+			engine.Logger().Println(err.Error())
+		}
 	}()
 
 	err = ik.NewFluentConfigurer(logger, registry, registry, router).Configure(engine, config)
