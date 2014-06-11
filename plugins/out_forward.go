@@ -1,28 +1,31 @@
 package plugins
 
 import (
-	"github.com/moriyoshi/ik"
 	"bytes"
-	"github.com/ugorji/go/codec"
 	"log"
 	"net"
 	"reflect"
 	"strconv"
 	"time"
+
+	"github.com/moriyoshi/ik"
+	"github.com/ugorji/go/codec"
 )
 
 type ForwardOutput struct {
-	factory *ForwardOutputFactory
-	logger  *log.Logger
-	codec   *codec.MsgpackHandle
-	bind    string
-	enc     *codec.Encoder
-	conn    net.Conn
-	buffer  bytes.Buffer
+	factory        *ForwardOutputFactory
+	logger         *log.Logger
+	codec          *codec.MsgpackHandle
+	bind           string
+	enc            *codec.Encoder
+	conn           net.Conn
+	buffer         bytes.Buffer
+	emitCh         chan []ik.FluentRecordSet
+	flush_interval int
 }
 
 func (output *ForwardOutput) encodeEntry(tag string, record ik.TinyFluentRecord) error {
-	v := []interface{} { tag, record.Timestamp, record.Data }
+	v := []interface{}{tag, record.Timestamp, record.Data}
 	if output.enc == nil {
 		output.enc = codec.NewEncoder(&output.buffer, output.codec)
 	}
@@ -34,7 +37,7 @@ func (output *ForwardOutput) encodeEntry(tag string, record ik.TinyFluentRecord)
 }
 
 func (output *ForwardOutput) encodeRecordSet(recordSet ik.FluentRecordSet) error {
-	v := []interface{} { recordSet.Tag, recordSet.Records }
+	v := []interface{}{recordSet.Tag, recordSet.Records}
 	if output.enc == nil {
 		output.enc = codec.NewEncoder(&output.buffer, output.codec)
 	}
@@ -69,19 +72,12 @@ func (output *ForwardOutput) flush() error {
 	return nil
 }
 
-func (output *ForwardOutput) run_flush(flush_interval int) {
-	ticker := time.NewTicker(time.Duration(flush_interval) * time.Second)
-	go func() {
-		for {
-			select {
-			case <-ticker.C:
-				output.flush()
-			}
-		}
-	}()
+func (output *ForwardOutput) Emit(recordSet []ik.FluentRecordSet) error {
+	output.emitCh <- recordSet
+	return nil
 }
 
-func (output *ForwardOutput) Emit(recordSet []ik.FluentRecordSet) error {
+func (output *ForwardOutput) emit(recordSet []ik.FluentRecordSet) error {
 	for _, recordSet := range recordSet {
 		err := output.encodeRecordSet(recordSet)
 		if err != nil {
@@ -97,8 +93,17 @@ func (output *ForwardOutput) Factory() ik.Plugin {
 }
 
 func (output *ForwardOutput) Run() error {
-	time.Sleep(1000000000)
-	return ik.Continue
+	ticker := time.NewTicker(time.Duration(output.flush_interval) * time.Second)
+	for {
+		select {
+		case rs := <-output.emitCh:
+			if err := output.emit(rs); err != nil {
+				output.logger.Printf("%#v", err)
+			}
+		case <-ticker.C:
+			output.flush()
+		}
+	}
 }
 
 func (output *ForwardOutput) Shutdown() error {
@@ -108,17 +113,18 @@ func (output *ForwardOutput) Shutdown() error {
 type ForwardOutputFactory struct {
 }
 
-func newForwardOutput(factory *ForwardOutputFactory, logger *log.Logger, bind string) (*ForwardOutput, error) {
+func newForwardOutput(factory *ForwardOutputFactory, logger *log.Logger, bind string, flush_interval int) *ForwardOutput {
 	_codec := codec.MsgpackHandle{}
 	_codec.MapType = reflect.TypeOf(map[string]interface{}(nil))
 	_codec.RawToString = false
 	_codec.StructToArray = true
 	return &ForwardOutput{
-		factory: factory,
-		logger:  logger,
-		codec:   &_codec,
-		bind:    bind,
-	}, nil
+		factory:        factory,
+		logger:         logger,
+		codec:          &_codec,
+		bind:           bind,
+		flush_interval: flush_interval,
+	}
 }
 
 func (factory *ForwardOutputFactory) Name() string {
@@ -144,9 +150,7 @@ func (factory *ForwardOutputFactory) New(engine ik.Engine, config *ik.ConfigElem
 		return nil, err
 	}
 	bind := host + ":" + netPort
-	output, err := newForwardOutput(factory, engine.Logger(), bind)
-	output.run_flush(flush_interval)
-	return output, err
+	return newForwardOutput(factory, engine.Logger(), bind, flush_interval), nil
 }
 
 func (factory *ForwardOutputFactory) BindScorekeeper(scorekeeper *ik.Scorekeeper) {
