@@ -49,9 +49,9 @@ type DefaultLineReader struct {
 type DefaultOpener http.Dir
 
 var (
-	stripCommentRegexp, _ = regexp.Compile("\\s*(?:#.*)?$")
-	startTagRegexp, _     = regexp.Compile("^<([a-zA-Z0-9_]+)\\s*(.+?)?>$")
-	attrRegExp, _         = regexp.Compile("^([a-zA-Z0-9_]+)\\s+(.*)$")
+	stripCommentRegexp = regexp.MustCompile("\\s*(?:#.*)?$")
+	startTagRegexp     = regexp.MustCompile("^<([a-zA-Z0-9_]+)\\s*(.+?)?>$")
+	attrRegExp         = regexp.MustCompile("^([a-zA-Z0-9_]+)\\s+(.*)$")
 )
 
 func (reader *DefaultLineReader) Next() (string, error) {
