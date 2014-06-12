@@ -44,6 +44,9 @@ func (output *ForwardOutput) encodeRecordSet(recordSet ik.FluentRecordSet) error
 }
 
 func (output *ForwardOutput) flush() error {
+	if output.buffer.Len() == 0 {
+		return nil
+	}
 	buffer := output.buffer
 	output.buffer = &bytes.Buffer{}
 	output.enc = nil
