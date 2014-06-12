@@ -152,11 +152,11 @@ func (factory *ForwardOutputFactory) New(engine ik.Engine, config *ik.ConfigElem
 	if !ok {
 		netPort = "24224"
 	}
-	flush_interval_str, ok := config.Attrs["flush_interval"]
+	flushIntervalStr, ok := config.Attrs["flush_interval"]
 	if !ok {
-		flush_interval_str = "60"
+		flushIntervalStr = "60"
 	}
-	flushInterval, err := strconv.Atoi(flush_interval_str)
+	flushInterval, err := strconv.Atoi(flushIntervalStr)
 	if err != nil {
 		engine.Logger().Print(err.Error())
 		return nil, err
