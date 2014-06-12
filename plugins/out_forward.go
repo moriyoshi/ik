@@ -55,7 +55,7 @@ func (output *ForwardOutput) flush() error {
 	output.buffer = bytes.Buffer{}
 
 	output.flushWg.Add(1)
-	go func() {
+	go func() { // TODO: static goroutine for flushing.
 		defer output.flushWg.Done()
 		conn, err := net.Dial("tcp", output.bind)
 		if err != nil {
@@ -92,6 +92,11 @@ func (output *ForwardOutput) Factory() ik.Plugin {
 }
 
 func (output *ForwardOutput) Run() error {
+	time.Sleep(time.Second)
+	return ik.Continue
+}
+
+func (output *ForwardOutput) mainLoop() {
 	ticker := time.NewTicker(time.Duration(output.flushInterval) * time.Second)
 	for {
 		select {
@@ -106,7 +111,7 @@ func (output *ForwardOutput) Run() error {
 			output.flush()
 			output.flushWg.Wait()
 			finish <- nil
-			return nil
+			return
 		}
 	}
 }
@@ -160,7 +165,9 @@ func (factory *ForwardOutputFactory) New(engine ik.Engine, config *ik.ConfigElem
 		return nil, err
 	}
 	bind := host + ":" + netPort
-	return newForwardOutput(factory, engine.Logger(), bind, flushInterval), nil
+	output := newForwardOutput(factory, engine.Logger(), bind, flushInterval)
+	go output.mainLoop()
+	return output, nil
 }
 
 func (factory *ForwardOutputFactory) BindScorekeeper(scorekeeper *ik.Scorekeeper) {
