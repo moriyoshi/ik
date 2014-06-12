@@ -2,6 +2,7 @@ package plugins
 
 import (
 	"bytes"
+	"fmt"
 	"log"
 	"net"
 	"reflect"
@@ -19,7 +20,7 @@ type ForwardOutput struct {
 	codec         *codec.MsgpackHandle
 	bind          string
 	enc           *codec.Encoder
-	buffer        bytes.Buffer
+	buffer        *bytes.Buffer
 	emitCh        chan []ik.FluentRecordSet
 	shutdown      chan (chan error)
 	flushInterval int
@@ -29,30 +30,23 @@ type ForwardOutput struct {
 func (output *ForwardOutput) encodeEntry(tag string, record ik.TinyFluentRecord) error {
 	v := []interface{}{tag, record.Timestamp, record.Data}
 	if output.enc == nil {
-		output.enc = codec.NewEncoder(&output.buffer, output.codec)
+		output.enc = codec.NewEncoder(output.buffer, output.codec)
 	}
-	err := output.enc.Encode(v)
-	if err != nil {
-		return err
-	}
-	return err
+	return output.enc.Encode(v)
 }
 
 func (output *ForwardOutput) encodeRecordSet(recordSet ik.FluentRecordSet) error {
 	v := []interface{}{recordSet.Tag, recordSet.Records}
 	if output.enc == nil {
-		output.enc = codec.NewEncoder(&output.buffer, output.codec)
+		output.enc = codec.NewEncoder(output.buffer, output.codec)
 	}
-	err := output.enc.Encode(v)
-	if err != nil {
-		return err
-	}
-	return err
+	return output.enc.Encode(v)
 }
 
 func (output *ForwardOutput) flush() error {
 	buffer := output.buffer
-	output.buffer = bytes.Buffer{}
+	output.buffer = &bytes.Buffer{}
+	output.enc = nil
 
 	output.flushWg.Add(1)
 	go func() { // TODO: static goroutine for flushing.
@@ -65,7 +59,7 @@ func (output *ForwardOutput) flush() error {
 		defer conn.Close()
 
 		if n, err := buffer.WriteTo(conn); err != nil {
-			output.logger.Printf("Write failed. size: %d, buf size: %d, error: %#v", n, output.buffer.Len(), err.Error())
+			output.logger.Printf("Write failed. size: %d, buf size: %d, error: %#v", n, buffer.Len(), err)
 		}
 	}()
 	return nil
@@ -93,6 +87,7 @@ func (output *ForwardOutput) Factory() ik.Plugin {
 
 func (output *ForwardOutput) Run() error {
 	time.Sleep(time.Second)
+	// TODO: Should return something when finished?
 	return ik.Continue
 }
 
@@ -101,6 +96,7 @@ func (output *ForwardOutput) mainLoop() {
 	for {
 		select {
 		case rs := <-output.emitCh:
+			fmt.Println("output: ", rs)
 			if err := output.emit(rs); err != nil {
 				output.logger.Printf("%#v", err)
 			}
@@ -135,6 +131,7 @@ func newForwardOutput(factory *ForwardOutputFactory, logger *log.Logger, bind st
 		logger:        logger,
 		codec:         &_codec,
 		bind:          bind,
+		buffer:        &bytes.Buffer{},
 		emitCh:        make(chan []ik.FluentRecordSet),
 		shutdown:      make(chan chan error),
 		flushInterval: flushInterval,
