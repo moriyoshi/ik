@@ -6,6 +6,7 @@ import (
 	"net"
 	"reflect"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/moriyoshi/ik"
@@ -13,15 +14,16 @@ import (
 )
 
 type ForwardOutput struct {
-	factory        *ForwardOutputFactory
-	logger         *log.Logger
-	codec          *codec.MsgpackHandle
-	bind           string
-	enc            *codec.Encoder
-	conn           net.Conn
-	buffer         bytes.Buffer
-	emitCh         chan []ik.FluentRecordSet
-	flush_interval int
+	factory       *ForwardOutputFactory
+	logger        *log.Logger
+	codec         *codec.MsgpackHandle
+	bind          string
+	enc           *codec.Encoder
+	buffer        bytes.Buffer
+	emitCh        chan []ik.FluentRecordSet
+	shutdown      chan (chan error)
+	flushInterval int
+	flushWg       sync.WaitGroup
 }
 
 func (output *ForwardOutput) encodeEntry(tag string, record ik.TinyFluentRecord) error {
@@ -49,26 +51,23 @@ func (output *ForwardOutput) encodeRecordSet(recordSet ik.FluentRecordSet) error
 }
 
 func (output *ForwardOutput) flush() error {
-	if output.conn == nil {
+	buffer := output.buffer
+	output.buffer = bytes.Buffer{}
+
+	output.flushWg.Add(1)
+	go func() {
+		defer output.flushWg.Done()
 		conn, err := net.Dial("tcp", output.bind)
 		if err != nil {
-			output.logger.Printf("%#v", err.Error())
-			return err
-		} else {
-			output.conn = conn
+			output.logger.Printf("%#v", err)
+			return
 		}
-	}
-	n, err := output.buffer.WriteTo(output.conn)
-	if err != nil {
-		output.logger.Printf("Write failed. size: %d, buf size: %d, error: %#v", n, output.buffer.Len(), err.Error())
-		output.conn = nil
-		return err
-	}
-	if n > 0 {
-		output.logger.Printf("Forwarded: %d bytes (left: %d bytes)\n", n, output.buffer.Len())
-	}
-	output.conn.Close()
-	output.conn = nil
+		defer conn.Close()
+
+		if n, err := buffer.WriteTo(conn); err != nil {
+			output.logger.Printf("Write failed. size: %d, buf size: %d, error: %#v", n, output.buffer.Len(), err.Error())
+		}
+	}()
 	return nil
 }
 
@@ -93,7 +92,7 @@ func (output *ForwardOutput) Factory() ik.Plugin {
 }
 
 func (output *ForwardOutput) Run() error {
-	ticker := time.NewTicker(time.Duration(output.flush_interval) * time.Second)
+	ticker := time.NewTicker(time.Duration(output.flushInterval) * time.Second)
 	for {
 		select {
 		case rs := <-output.emitCh:
@@ -102,28 +101,39 @@ func (output *ForwardOutput) Run() error {
 			}
 		case <-ticker.C:
 			output.flush()
+		case finish := <-output.shutdown:
+			close(output.emitCh)
+			output.flush()
+			output.flushWg.Wait()
+			finish <- nil
+			return nil
 		}
 	}
 }
 
 func (output *ForwardOutput) Shutdown() error {
-	return nil
+	finish := make(chan error)
+	output.shutdown <- finish
+	return <-finish
 }
 
 type ForwardOutputFactory struct {
 }
 
-func newForwardOutput(factory *ForwardOutputFactory, logger *log.Logger, bind string, flush_interval int) *ForwardOutput {
+func newForwardOutput(factory *ForwardOutputFactory, logger *log.Logger, bind string, flushInterval int) *ForwardOutput {
 	_codec := codec.MsgpackHandle{}
 	_codec.MapType = reflect.TypeOf(map[string]interface{}(nil))
 	_codec.RawToString = false
 	_codec.StructToArray = true
 	return &ForwardOutput{
-		factory:        factory,
-		logger:         logger,
-		codec:          &_codec,
-		bind:           bind,
-		flush_interval: flush_interval,
+		factory:       factory,
+		logger:        logger,
+		codec:         &_codec,
+		bind:          bind,
+		emitCh:        make(chan []ik.FluentRecordSet),
+		shutdown:      make(chan chan error),
+		flushInterval: flushInterval,
+		flushWg:       sync.WaitGroup{},
 	}
 }
 
@@ -144,13 +154,13 @@ func (factory *ForwardOutputFactory) New(engine ik.Engine, config *ik.ConfigElem
 	if !ok {
 		flush_interval_str = "60"
 	}
-	flush_interval, err := strconv.Atoi(flush_interval_str)
+	flushInterval, err := strconv.Atoi(flush_interval_str)
 	if err != nil {
 		engine.Logger().Print(err.Error())
 		return nil, err
 	}
 	bind := host + ":" + netPort
-	return newForwardOutput(factory, engine.Logger(), bind, flush_interval), nil
+	return newForwardOutput(factory, engine.Logger(), bind, flushInterval), nil
 }
 
 func (factory *ForwardOutputFactory) BindScorekeeper(scorekeeper *ik.Scorekeeper) {
