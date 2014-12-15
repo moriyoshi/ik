@@ -1,34 +1,34 @@
 package ik
 
 import (
+	"bytes"
 	"net/http"
+	"os"
 	"strings"
 	"testing"
-	"bytes"
-	"os"
 )
 
 type myOpener string
-type myFile struct { b *bytes.Buffer }
-type myFileSystem struct { s string }
+type myFile struct{ b *bytes.Buffer }
+type myFileSystem struct{ s string }
 
-func (f *myFile) Close() error { return nil }
-func (f *myFile) Read(b []byte) (int, error) { return f.b.Read(b) }
+func (f *myFile) Close() error                       { return nil }
+func (f *myFile) Read(b []byte) (int, error)         { return f.b.Read(b) }
 func (f *myFile) Readdir(int) ([]os.FileInfo, error) { return nil, nil }
-func (f *myFile) Seek(int64, int) (int64, error) { return 0, nil }
-func (f *myFile) Stat() (os.FileInfo, error) { return nil, nil }
+func (f *myFile) Seek(int64, int) (int64, error)     { return 0, nil }
+func (f *myFile) Stat() (os.FileInfo, error)         { return nil, nil }
 
 func (fs *myFileSystem) Open(string) (http.File, error) {
-	return &myFile{ b: bytes.NewBuffer(([]byte)(fs.s)) }, nil
+	return &myFile{b: bytes.NewBuffer(([]byte)(fs.s))}, nil
 }
 
 func (opener myOpener) NewLineReader(filename string) (LineReader, error) {
 	return NewDefaultLineReader(filename, strings.NewReader(string(opener))), nil
 }
 
-func (s myOpener) FileSystem() http.FileSystem  { return &myFileSystem { s: string(s) } }
-func (myOpener) BasePath() string             { return "" }
-func (myOpener) NewOpener(path string) Opener { return myOpener("") }
+func (s myOpener) FileSystem() http.FileSystem { return &myFileSystem{s: string(s)} }
+func (myOpener) BasePath() string              { return "" }
+func (myOpener) NewOpener(path string) Opener  { return myOpener("") }
 
 func TestParseConfig(t *testing.T) {
 	const data = "<test>\n" +

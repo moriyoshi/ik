@@ -1,19 +1,19 @@
 package main
 
 import (
-	"fmt"
 	"errors"
+	"fmt"
 	"github.com/moriyoshi/ik"
 )
 
 type MultiFactoryRegistry struct {
-	scorekeeper         *ik.Scorekeeper
-	inputFactories      map[string]ik.InputFactory
-	outputFactories     map[string]ik.OutputFactory
-	scoreboardFactories map[string]ik.ScoreboardFactory
-	lineParserPlugins   map[string]ik.LineParserPlugin
+	scorekeeper                *ik.Scorekeeper
+	inputFactories             map[string]ik.InputFactory
+	outputFactories            map[string]ik.OutputFactory
+	scoreboardFactories        map[string]ik.ScoreboardFactory
+	lineParserPlugins          map[string]ik.LineParserPlugin
 	lineParserFactoryFactories map[string]ik.LineParserFactoryFactory
-	plugins             []ik.Plugin
+	plugins                    []ik.Plugin
 }
 
 func (registry *MultiFactoryRegistry) RegisterInputFactory(factory ik.InputFactory) error {
@@ -78,7 +78,7 @@ func (registry *MultiFactoryRegistry) RegisterLineParserPlugin(plugin ik.LinePar
 	if alreadyExists {
 		return errors.New(fmt.Sprintf("LineParserPlugin named %s already registered", plugin.Name()))
 	}
-	err := plugin.OnRegistering(func (name string, factory ik.LineParserFactoryFactory) error {
+	err := plugin.OnRegistering(func(name string, factory ik.LineParserFactoryFactory) error {
 		_, alreadyExists := registry.lineParserFactoryFactories[name]
 		if alreadyExists {
 			return errors.New(fmt.Sprintf("LineParserFactoryFactory named %s already registered", name))
@@ -108,12 +108,12 @@ func (registry *MultiFactoryRegistry) Plugins() []ik.Plugin {
 }
 
 func NewMultiFactoryRegistry(scorekeeper *ik.Scorekeeper) *MultiFactoryRegistry {
-	return &MultiFactoryRegistry {
-		scorekeeper: scorekeeper,
-		inputFactories:  make(map[string]ik.InputFactory),
-		outputFactories: make(map[string]ik.OutputFactory),
-		scoreboardFactories: make(map[string]ik.ScoreboardFactory),
-		lineParserPlugins: make(map[string]ik.LineParserPlugin),
+	return &MultiFactoryRegistry{
+		scorekeeper:                scorekeeper,
+		inputFactories:             make(map[string]ik.InputFactory),
+		outputFactories:            make(map[string]ik.OutputFactory),
+		scoreboardFactories:        make(map[string]ik.ScoreboardFactory),
+		lineParserPlugins:          make(map[string]ik.LineParserPlugin),
 		lineParserFactoryFactories: make(map[string]ik.LineParserFactoryFactory),
 	}
 }

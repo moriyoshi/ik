@@ -1,11 +1,11 @@
 package ik
 
 import (
-	"log"
+	"github.com/moriyoshi/ik/task"
 	"io"
+	"log"
 	"math/rand"
 	"net/http"
-	"github.com/moriyoshi/ik/task"
 )
 
 type FluentRecord struct {
@@ -20,8 +20,8 @@ type TinyFluentRecord struct {
 }
 
 type FluentRecordSet struct {
-	Tag       string
-	Records   []TinyFluentRecord
+	Tag     string
+	Records []TinyFluentRecord
 }
 
 type Port interface {
@@ -86,11 +86,11 @@ type Plugin interface {
 }
 
 type ScorekeeperTopic struct {
-	Plugin Plugin
-	Name string
+	Plugin      Plugin
+	Name        string
 	DisplayName string
 	Description string
-	Fetcher ScoreValueFetcher
+	Fetcher     ScoreValueFetcher
 }
 
 type Opener interface {
@@ -154,7 +154,7 @@ type JournalChunk interface {
 	TakeOwnership() bool
 }
 
-type JournalChunkListener func (JournalChunk) error
+type JournalChunkListener func(JournalChunk) error
 
 type Journal interface {
 	Disposable
@@ -163,7 +163,7 @@ type Journal interface {
 	GetTailChunk() JournalChunk
 	AddNewChunkListener(JournalChunkListener)
 	AddFlushListener(JournalChunkListener)
-	Flush(func (JournalChunk) error) error
+	Flush(func(JournalChunk) error) error
 }
 
 type JournalGroup interface {
@@ -185,18 +185,17 @@ type LineParser interface {
 }
 
 type LineParserFactory interface {
-	New(receiver func (FluentRecord) error) (LineParser, error)
+	New(receiver func(FluentRecord) error) (LineParser, error)
 }
 
-type LineParserFactoryFactory func (engine Engine, config *ConfigElement) (LineParserFactory, error)
+type LineParserFactoryFactory func(engine Engine, config *ConfigElement) (LineParserFactory, error)
 
 type LineParserPlugin interface {
 	Name() string
-	OnRegistering(func (name string, factory LineParserFactoryFactory) error) error
+	OnRegistering(func(name string, factory LineParserFactoryFactory) error) error
 }
 
 type LineParserPluginRegistry interface {
 	RegisterLineParserPlugin(plugin LineParserPlugin) error
 	LookupLineParserFactoryFactory(name string) LineParserFactoryFactory
 }
-

@@ -1,39 +1,39 @@
 package plugins
 
 import (
+	"compress/gzip"
+	"encoding/json"
+	"errors"
+	"fmt"
+	strftime "github.com/jehiah/go-strftime"
 	"github.com/moriyoshi/ik"
 	jnl "github.com/moriyoshi/ik/journal"
 	"io"
-	"strconv"
-	"math/rand"
-	"compress/gzip"
-	"os"
-	"fmt"
 	"log"
-	"time"
+	"math/rand"
+	"os"
 	"path"
-	"errors"
+	"strconv"
 	"strings"
-	"encoding/json"
-	strftime "github.com/jehiah/go-strftime"
+	"time"
 )
 
 type FileOutput struct {
-	factory *FileOutputFactory
-	logger  *log.Logger
-	pathPrefix string
-	pathSuffix string
-	symlinkPath string
-	permission os.FileMode
+	factory           *FileOutputFactory
+	logger            *log.Logger
+	pathPrefix        string
+	pathSuffix        string
+	symlinkPath       string
+	permission        os.FileMode
 	compressionFormat int
-	journalGroup ik.JournalGroup
-	slicer *ik.Slicer
-	timeFormat string
-	timeSliceFormat string
-	location *time.Location
-	c chan []ik.FluentRecordSet
-	cancel chan bool
-	disableDraining bool
+	journalGroup      ik.JournalGroup
+	slicer            *ik.Slicer
+	timeFormat        string
+	timeSliceFormat   string
+	location          *time.Location
+	c                 chan []ik.FluentRecordSet
+	cancel            chan bool
+	disableDraining   bool
 }
 
 type FileOutputPacker struct {
@@ -89,7 +89,7 @@ func (output *FileOutput) Factory() ik.Plugin {
 
 func (output *FileOutput) Run() error {
 	select {
-	case <- output.cancel:
+	case <-output.cancel:
 		return nil
 	case recordSets := <-output.c:
 		err := output.slicer.Emit(recordSets)
@@ -155,7 +155,7 @@ func (output *FileOutput) flush(key string, chunk ik.JournalChunk) error {
 		return err
 	}
 	var writer io.WriteCloser
-	writer, err = os.OpenFile(outPath, os.O_CREATE | os.O_EXCL | os.O_WRONLY, output.permission)
+	writer, err = os.OpenFile(outPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, output.permission)
 	if err != nil {
 		return err
 	}
@@ -183,7 +183,7 @@ func (output *FileOutput) flush(key string, chunk ik.JournalChunk) error {
 
 func (output *FileOutput) attachListeners(journal ik.Journal) {
 	if output.symlinkPath != "" {
-		journal.AddNewChunkListener(func (chunk ik.JournalChunk) error {
+		journal.AddNewChunkListener(func(chunk ik.JournalChunk) error {
 			defer chunk.Dispose()
 			wrapper, ok := chunk.(*jnl.FileJournalChunkWrapper)
 			if !ok {
@@ -201,7 +201,7 @@ func (output *FileOutput) attachListeners(journal ik.Journal) {
 			return err
 		})
 	}
-	journal.AddFlushListener(func (chunk ik.JournalChunk) error {
+	journal.AddFlushListener(func(chunk ik.JournalChunk) error {
 		defer chunk.Dispose()
 		chunk.TakeOwnership()
 		return output.flush(journal.Key(), chunk)
@@ -215,25 +215,25 @@ func newFileOutput(factory *FileOutputFactory, logger *log.Logger, randSource ra
 	journalGroupFactory := jnl.NewFileJournalGroupFactory(
 		logger,
 		randSource,
-		func () time.Time { return time.Now() },
+		func() time.Time { return time.Now() },
 		pathSuffix,
 		permission,
 		bufferChunkLimit,
 	)
-	retval := &FileOutput {
-		factory: factory,
-		logger:  logger,
-		pathPrefix: pathPrefix,
-		pathSuffix: pathSuffix,
-		symlinkPath: symlinkPath,
-		permission: permission,
+	retval := &FileOutput{
+		factory:           factory,
+		logger:            logger,
+		pathPrefix:        pathPrefix,
+		pathSuffix:        pathSuffix,
+		symlinkPath:       symlinkPath,
+		permission:        permission,
 		compressionFormat: compressionFormat,
-		timeFormat: timeFormat,
-		timeSliceFormat: timeSliceFormat,
-		location: time.UTC,
-		c: make(chan []ik.FluentRecordSet, 100 /* FIXME */),
-		cancel: make(chan bool),
-		disableDraining: disableDraining,
+		timeFormat:        timeFormat,
+		timeSliceFormat:   timeSliceFormat,
+		location:          time.UTC,
+		c:                 make(chan []ik.FluentRecordSet, 100 /* FIXME */),
+		cancel:            make(chan bool),
+		disableDraining:   disableDraining,
 	}
 	journalGroup, err := journalGroupFactory.GetJournalGroup(pathPrefix, retval)
 	if err != nil {
@@ -242,17 +242,17 @@ func newFileOutput(factory *FileOutputFactory, logger *log.Logger, randSource ra
 
 	slicer := ik.NewSlicer(
 		journalGroup,
-		func (record ik.FluentRecord) string {
+		func(record ik.FluentRecord) string {
 			timestamp_ := time.Unix(int64(record.Timestamp), 0)
 			return strftime.Format(retval.timeSliceFormat, timestamp_)
 		},
-		&FileOutputPacker { retval },
+		&FileOutputPacker{retval},
 		logger,
 	)
-	slicer.AddNewKeyEventListener(func (last ik.Journal, next ik.Journal) error {
+	slicer.AddNewKeyEventListener(func(last ik.Journal, next ik.Journal) error {
 		err := (error)(nil)
 		if last != nil {
-			err = last.Flush(func (chunk ik.JournalChunk) error {
+			err = last.Flush(func(chunk ik.JournalChunk) error {
 				defer chunk.Dispose()
 				chunk.TakeOwnership()
 				return retval.flush(last.Key(), chunk)
@@ -320,7 +320,7 @@ func (factory *FileOutputFactory) New(engine ik.Engine, config *ik.ConfigElement
 	pos := strings.Index(path, "*")
 	if pos >= 0 {
 		pathPrefix = path[0:pos]
-		pathSuffix = path[pos + 1:]
+		pathSuffix = path[pos+1:]
 	} else {
 		pathPrefix = path + "."
 		pathSuffix = ".log"

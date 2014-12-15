@@ -5,17 +5,17 @@ import (
 	"sync/atomic"
 )
 
-type SimpleTaskRunner struct {}
+type SimpleTaskRunner struct{}
 
 type simpleTaskStatus struct {
 	condMutex sync.Mutex
-	cond *sync.Cond
+	cond      *sync.Cond
 	completed uintptr
-	status error
-	result interface {}
+	status    error
+	result    interface{}
 }
 
-func (status *simpleTaskStatus) Result() interface {} {
+func (status *simpleTaskStatus) Result() interface{} {
 	return status.result
 }
 
@@ -35,26 +35,26 @@ func (status *simpleTaskStatus) Poll() {
 	status.cond.Wait()
 }
 
-func runTask(taskStatus *simpleTaskStatus, task func () (interface {}, error)) {
-	defer func () {
+func runTask(taskStatus *simpleTaskStatus, task func() (interface{}, error)) {
+	defer func() {
 		r := recover()
 		if r != nil {
-			taskStatus.status = &PanickedStatus { r }
+			taskStatus.status = &PanickedStatus{r}
 		}
 	}()
 	taskStatus.result, taskStatus.status = task()
 }
 
-func (runner *SimpleTaskRunner) Run(task func () (interface {}, error)) (TaskStatus, error) {
-	taskStatus := &simpleTaskStatus {
-		condMutex: sync.Mutex {},
+func (runner *SimpleTaskRunner) Run(task func() (interface{}, error)) (TaskStatus, error) {
+	taskStatus := &simpleTaskStatus{
+		condMutex: sync.Mutex{},
 		completed: 0,
-		status: NotCompleted,
-		result: nil,
+		status:    NotCompleted,
+		result:    nil,
 	}
 	taskStatus.cond = sync.NewCond(&taskStatus.condMutex)
 
-	go func () {
+	go func() {
 		runTask(taskStatus, task)
 		atomic.StoreUintptr(&taskStatus.completed, 1)
 		taskStatus.cond.Broadcast()

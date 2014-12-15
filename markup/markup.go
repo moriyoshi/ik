@@ -7,5 +7,5 @@ type Writer interface {
 }
 
 type MarkupRenderer interface {
-    Render(markup *ik.Markup)
+	Render(markup *ik.Markup)
 }

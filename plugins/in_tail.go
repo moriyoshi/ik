@@ -1,31 +1,31 @@
 package plugins
 
 import (
-	"os"
-	"io"
-	"fmt"
-	"log"
-	"time"
 	"bytes"
+	"encoding/hex"
 	"errors"
+	"fmt"
+	"github.com/howeyc/fsnotify"
+	fileid "github.com/moriyoshi/go-fileid"
+	"github.com/moriyoshi/ik"
+	"io"
+	"log"
+	"net/http"
+	"os"
+	"reflect"
 	"strconv"
 	"strings"
-	"reflect"
-	"net/http"
-	"encoding/hex"
 	"sync"
-	"github.com/moriyoshi/ik"
-	fileid "github.com/moriyoshi/go-fileid"
-	"github.com/howeyc/fsnotify"
+	"time"
 )
 
 const DefaultBacklogSize = 2048
 
 type MyBufferedReader struct {
-	inner io.Reader
-	b []byte
-	r, w int
-	position int64
+	inner      io.Reader
+	b          []byte
+	r, w       int
+	position   int64
 	eofReached bool
 }
 
@@ -80,7 +80,7 @@ func (b *MyBufferedReader) ReadLine() ([]byte, bool, bool, error) {
 		i := bytes.IndexByte(b.b[b.r:b.w], '\n')
 		if i >= 0 {
 			e := b.r + i
-			if e > 0 && b.b[e - 1] == '\r' {
+			if e > 0 && b.b[e-1] == '\r' {
 				e -= 1
 			}
 			line := b.b[b.r:e]
@@ -117,79 +117,79 @@ func (b *MyBufferedReader) ReadLine() ([]byte, bool, bool, error) {
 }
 
 func NewMyBufferedReader(reader io.Reader, bufSize int, position int64) *MyBufferedReader {
-	return &MyBufferedReader {
-		inner: reader,
-		b: make([]byte, bufSize),
-		r: 0,
-		w: 0,
-		position: position,
+	return &MyBufferedReader{
+		inner:      reader,
+		b:          make([]byte, bufSize),
+		r:          0,
+		w:          0,
+		position:   position,
 		eofReached: false,
 	}
 }
 
 type TailTarget struct {
 	path string
-	f *os.File
+	f    *os.File
 	size int64
-	id fileid.FileId
+	id   fileid.FileId
 }
 
 type TailEventHandler struct {
-	logger *log.Logger
-	path string
-	rotateWait time.Duration
-	target TailTarget
-	pending bool
-	expiry time.Time
-	bf *MyBufferedReader
+	logger         *log.Logger
+	path           string
+	rotateWait     time.Duration
+	target         TailTarget
+	pending        bool
+	expiry         time.Time
+	bf             *MyBufferedReader
 	readBufferSize int
-	decoder func ([]byte) (string, error)
-	stateSaver func (target TailTarget, position int64) error
-	lineReceiver func (line string) error
-	closer func () error
+	decoder        func([]byte) (string, error)
+	stateSaver     func(target TailTarget, position int64) error
+	lineReceiver   func(line string) error
+	closer         func() error
 }
 
 func openTarget(path string) (TailTarget, error) {
 	f, err := os.OpenFile(path, os.O_RDONLY, 0)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return TailTarget {
+			return TailTarget{
 				path: path,
-				f: nil,
+				f:    nil,
 			}, nil
 		} else {
-			return TailTarget {}, err
+			return TailTarget{}, err
 		}
 	}
 
 	info, err := f.Stat()
 	if err != nil {
-		return TailTarget {}, err
+		return TailTarget{}, err
 	}
 
 	id, err := fileid.GetFileId(path, true)
 	if err != nil {
-		return TailTarget {}, err
+		return TailTarget{}, err
 	}
 
-	return TailTarget {
+	return TailTarget{
 		path: path,
-		f: f,
+		f:    f,
 		size: info.Size(),
-		id: id,
+		id:   id,
 	}, nil
 }
 
 func (target *TailTarget) UpdatedOne() (TailTarget, error) {
 	info, err := target.f.Stat()
 	if err != nil {
-		return TailTarget {}, err
+		return TailTarget{}, err
 	}
-	return TailTarget {
+	return TailTarget{
 		path: target.path,
-		f: target.f,
+		f:    target.f,
 		size: info.Size(),
-		id: target.id,
+		id:   target.id,
 	}, nil
 }
 
@@ -220,11 +220,11 @@ func (handler *TailEventHandler) fetch() error {
 				if line == nil {
 					panic("WTF?")
 				}
-				handler.logger.Printf("the file was not terminated by line endings and the file seems to have been rotated: %s, position=%d",  handler.target.path, handler.bf.position)
+				handler.logger.Printf("the file was not terminated by line endings and the file seems to have been rotated: %s, position=%d", handler.target.path, handler.bf.position)
 			}
 		}
 		if ispfx {
-			handler.logger.Printf("line too long: %s, position=%d",  handler.target.path, handler.bf.position)
+			handler.logger.Printf("line too long: %s, position=%d", handler.target.path, handler.bf.position)
 		}
 		stringizedLine, err := handler.decode(line)
 		if err != nil {
@@ -361,10 +361,10 @@ func NewTailEventHandler(
 	position int64,
 	rotateWait time.Duration,
 	readBufferSize int,
-	decoder func ([]byte) (string, error),
-	stateSaver func (target TailTarget, position int64) error,
-	lineReceiver func (line string) error,
-	closer func () error,
+	decoder func([]byte) (string, error),
+	stateSaver func(target TailTarget, position int64) error,
+	lineReceiver func(line string) error,
+	closer func() error,
 ) (*TailEventHandler, error) {
 	bf := (*MyBufferedReader)(nil)
 	if target.f != nil {
@@ -378,19 +378,19 @@ func NewTailEventHandler(
 	} else {
 		logger.Println("file does not exist: " + target.path)
 	}
-	return &TailEventHandler {
-		logger: logger,
-		path: target.path,
-		rotateWait: rotateWait,
-		target: target,
-		pending: false,
-		expiry: time.Time {},
-		bf: bf,
+	return &TailEventHandler{
+		logger:         logger,
+		path:           target.path,
+		rotateWait:     rotateWait,
+		target:         target,
+		pending:        false,
+		expiry:         time.Time{},
+		bf:             bf,
 		readBufferSize: readBufferSize,
-		decoder: decoder,
-		stateSaver: stateSaver,
-		lineReceiver: lineReceiver,
-		closer: closer,
+		decoder:        decoder,
+		stateSaver:     stateSaver,
+		lineReceiver:   lineReceiver,
+		closer:         closer,
 	}, nil
 }
 
@@ -420,22 +420,22 @@ type TailPositionFileEntry struct {
 }
 
 type TailPositionFile struct {
-	logger    *log.Logger
-	refcount  int64
-	path      string
-	f         *os.File
-	view      []byte
-	entries   map[string]*TailPositionFileEntry
+	logger      *log.Logger
+	refcount    int64
+	path        string
+	f           *os.File
+	view        []byte
+	entries     map[string]*TailPositionFileEntry
 	controlChan chan bool
-	mtx       sync.Mutex
+	mtx         sync.Mutex
 }
 
 type concreateTailFileInfo struct {
 	disposed bool
-	impl *TailPositionFileEntry
+	impl     *TailPositionFileEntry
 }
 
-func (wrapper *concreateTailFileInfo) Path() string{
+func (wrapper *concreateTailFileInfo) Path() string {
 	if wrapper.disposed {
 		panic("already disposed")
 	}
@@ -501,9 +501,9 @@ func (wrapper *concreateTailFileInfo) Dispose() error {
 
 func newConcreteTailFileInfo(impl *TailPositionFileEntry) *concreateTailFileInfo {
 	impl.addRef()
-	return &concreateTailFileInfo {
+	return &concreateTailFileInfo{
 		disposed: false,
-		impl: impl,
+		impl:     impl,
 	}
 }
 
@@ -535,7 +535,7 @@ func appendZeroPaddedUint(b []byte, value uint64, size uintptr) []byte {
 		if i < o {
 			break
 		}
-		b[i] = byte('0') + byte(value % 10)
+		b[i] = byte('0') + byte(value%10)
 		value /= 10
 		if value == 0 {
 			break
@@ -611,7 +611,8 @@ func unmarshalPositionFileData(retval *tailPositionFileData, blob []byte) (int, 
 	rv := reflect.ValueOf(&retval.Id).Elem()
 	fi := 0
 	n := rv.NumField()
-	outer: for {
+outer:
+	for {
 		switch blob[i] {
 		case '\t':
 			i += 1
@@ -660,7 +661,7 @@ func (entry *TailPositionFileEntry) deleteRef() error {
 func (positionFile *TailPositionFile) scheduleUpdate(entry *TailPositionFileEntry) error {
 	blob := marshalPositionFileData(&entry.data)
 	offset := entry.offset
-	copy(positionFile.view[offset:offset + len(blob)], blob)
+	copy(positionFile.view[offset:offset+len(blob)], blob)
 	positionFile.controlChan <- false
 	return nil
 }
@@ -693,18 +694,18 @@ func (positionFile *TailPositionFile) Get(path string) TailFileInfo {
 	entry, ok := positionFile.entries[path]
 	if !ok {
 		offset := len(positionFile.view)
-		entry = &TailPositionFileEntry {
+		entry = &TailPositionFileEntry{
 			positionFile: positionFile,
 			offset:       offset,
 			isNew:        true,
-			data:         tailPositionFileData {
+			data: tailPositionFileData{
 				Path:     path,
 				Position: 0,
-				Id:       fileid.FileId {},
+				Id:       fileid.FileId{},
 			},
 		}
 		blob := marshalPositionFileData(&entry.data)
-		newView := make([]byte, offset + len(blob))
+		newView := make([]byte, offset+len(blob))
 		copy(newView, positionFile.view)
 		copy(newView[offset:], blob)
 		positionFile.view = newView
@@ -738,11 +739,11 @@ func readTailPositionFileEntries(positionFile *TailPositionFile, f *os.File) (ma
 	}
 	consumed := 0
 	for offset := 0; offset < len(blob); offset += consumed {
-		entry := &TailPositionFileEntry {
+		entry := &TailPositionFileEntry{
 			positionFile: positionFile,
 			offset:       offset,
 			isNew:        false,
-			data:         tailPositionFileData {},
+			data:         tailPositionFileData{},
 		}
 		consumed, err = unmarshalPositionFileData(&entry.data, blob[offset:])
 		if err != nil {
@@ -755,20 +756,20 @@ func readTailPositionFileEntries(positionFile *TailPositionFile, f *os.File) (ma
 }
 
 func openPositionFile(logger *log.Logger, path string) (*TailPositionFile, error) {
-	f, err := os.OpenFile(path, os.O_RDWR | os.O_CREATE | os.O_EXCL, 0666) // FIXME
+	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0666) // FIXME
 	failed := true
-	defer func () {
+	defer func() {
 		if failed && f != nil {
 			f.Close()
 		}
 	}()
 	var entries map[string]*TailPositionFileEntry
-	retval := &TailPositionFile {
-		logger: logger,
-		refcount: 1,
-		path: path,
+	retval := &TailPositionFile{
+		logger:      logger,
+		refcount:    1,
+		path:        path,
 		controlChan: make(chan bool),
-		mtx: sync.Mutex {},
+		mtx:         sync.Mutex{},
 	}
 	if err != nil {
 		if !os.IsExist(err) {
@@ -828,20 +829,19 @@ func (positionFile *TailPositionFile) deleteRef() error {
 	return nil
 }
 
-
 type TailInputFactory struct {
 }
 
 type TailWatcher struct {
-	input             *TailInput
-	synthesizedTag    string
-	positionFile      *TailPositionFile
-	tailFileInfo      TailFileInfo
-	lineParser        ik.LineParser
-	handler           *TailEventHandler
-	statWatcher       *fsnotify.Watcher
-	timer             *time.Ticker
-	controlChan       chan bool
+	input          *TailInput
+	synthesizedTag string
+	positionFile   *TailPositionFile
+	tailFileInfo   TailFileInfo
+	lineParser     ik.LineParser
+	handler        *TailEventHandler
+	statWatcher    *fsnotify.Watcher
+	timer          *time.Ticker
+	controlChan    chan bool
 }
 
 func (watcher *TailWatcher) cleanup() {
@@ -910,7 +910,7 @@ func buildTagFromPath(path string) string {
 	state := 0
 	for i := 0; i < len(path); i += 1 {
 		c := path[i]
-		if c == '/' || c == '/'{
+		if c == '/' || c == '/' {
 			state = 1
 		} else {
 			if state == 1 {
@@ -939,7 +939,7 @@ func (input *TailInput) openTailWatcher(path string) (*TailWatcher, error) {
 	target, err := openTarget(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			target = TailTarget { path, nil, 0, fileid.FileId {} }
+			target = TailTarget{path, nil, 0, fileid.FileId{}}
 		} else {
 			return nil, err
 		}
@@ -952,7 +952,7 @@ func (input *TailInput) openTailWatcher(path string) (*TailWatcher, error) {
 			return nil, err
 		}
 	}
-	watcher := &TailWatcher {
+	watcher := &TailWatcher{
 		input:          input,
 		synthesizedTag: buildTagFromPath(path),
 	}
@@ -963,23 +963,23 @@ func (input *TailInput) openTailWatcher(path string) (*TailWatcher, error) {
 		input.rotateWait,
 		input.readBufferSize,
 		nil, // decoder
-		func (target TailTarget, position int64) error {
+		func(target TailTarget, position int64) error {
 			tailFileInfo := watcher.tailFileInfo
 			tailFileInfo.SetFileId(target.id)
 			tailFileInfo.SetPosition(position)
 			return tailFileInfo.Save()
 		},
-		func (line string) error {
+		func(line string) error {
 			return watcher.parseLine(line)
 		},
-		func () error {
+		func() error {
 			return watcher.tailFileInfo.Dispose()
 		},
 	)
 	if err != nil {
 		return nil, err
 	}
-	lineParser, err := input.lineParserFactory.New(func (record ik.FluentRecord) error {
+	lineParser, err := input.lineParserFactory.New(func(record ik.FluentRecord) error {
 		record.Tag = input.tagPrefix
 		input.pump.EmitOne(record)
 		return nil
@@ -1000,13 +1000,13 @@ func (input *TailInput) openTailWatcher(path string) (*TailWatcher, error) {
 		return nil, err
 	}
 
-	watcher.input        = input
+	watcher.input = input
 	watcher.tailFileInfo = tailFileInfo.Duplicate()
-	watcher.handler      = handler
-	watcher.statWatcher  = newStatWatcher
-	watcher.lineParser   = lineParser
-	watcher.timer        = time.NewTicker(time.Duration(1000000000)) // XXX
-	watcher.controlChan  = make(chan bool, 1)
+	watcher.handler = handler
+	watcher.statWatcher = newStatWatcher
+	watcher.lineParser = lineParser
+	watcher.timer = time.NewTicker(time.Duration(1000000000)) // XXX
+	watcher.controlChan = make(chan bool, 1)
 
 	err = input.engine.Spawn(watcher)
 	if err != nil {
@@ -1034,7 +1034,7 @@ type TailInput struct {
 	pump              *ik.RecordPump
 	watchers          map[string]*TailWatcher
 	refreshTimer      *time.Ticker
-	controlChan       chan struct {}
+	controlChan       chan struct{}
 }
 
 func (input *TailInput) Factory() ik.Plugin {
@@ -1063,7 +1063,7 @@ func (input *TailInput) Run() error {
 
 func (input *TailInput) cleanup() error {
 	input.refreshTimer.Stop()
-	errors := []error {
+	errors := []error{
 		input.pump.Shutdown(),
 		input.positionFile.Dispose(),
 	}
@@ -1078,7 +1078,7 @@ func (input *TailInput) cleanup() error {
 }
 
 func (input *TailInput) Shutdown() error {
-	input.controlChan <- struct {}{}
+	input.controlChan <- struct{}{}
 	return nil
 }
 
@@ -1091,7 +1091,7 @@ func (input *TailInput) refreshWatchers() error {
 	deleted := make([]*TailWatcher, 0, 8)
 	added := make([]*TailWatcher, 0, 8)
 	failed := true
-	defer func () {
+	defer func() {
 		if failed {
 			for _, watcher := range added {
 				watcher.Shutdown()
@@ -1152,34 +1152,34 @@ func newTailInput(
 	if err != nil {
 		return nil, err
 	}
-	defer func () {
+	defer func() {
 		if failed {
 			positionFile.Dispose()
 		}
 	}()
 	pump := ik.NewRecordPump(port, DefaultBacklogSize)
-	defer func () {
+	defer func() {
 		if failed {
 			pump.Shutdown()
 		}
 	}()
-	input := &TailInput {
-		factory:          factory,
-		engine:           engine,
-		logger:           logger,
-		port:             port,
-		pathSet:          pathSet,
-		tagPrefix:        tagPrefix,
-		tagSuffix:        tagSuffix,
-		rotateWait:	  rotateWait,
-		readFromHead:     readFromHead,
-		refreshInterval:  refreshInterval,
-		readBufferSize:   readBufferSize,
-		lineParserFactory:lineParserFactory,
-		pump:             pump,
-		positionFile:     positionFile,
-		watchers:         make(map[string]*TailWatcher),
-		controlChan:      make(chan struct {}, 1),
+	input := &TailInput{
+		factory:           factory,
+		engine:            engine,
+		logger:            logger,
+		port:              port,
+		pathSet:           pathSet,
+		tagPrefix:         tagPrefix,
+		tagSuffix:         tagSuffix,
+		rotateWait:        rotateWait,
+		readFromHead:      readFromHead,
+		refreshInterval:   refreshInterval,
+		readBufferSize:    readBufferSize,
+		lineParserFactory: lineParserFactory,
+		pump:              pump,
+		positionFile:      positionFile,
+		watchers:          make(map[string]*TailWatcher),
+		controlChan:       make(chan struct{}, 1),
 	}
 	err = engine.Spawn(pump)
 	if err != nil {
@@ -1202,27 +1202,27 @@ func (factory *TailInputFactory) Name() string {
 
 type PathSet struct {
 	patterns []string
-	fs http.FileSystem
+	fs       http.FileSystem
 }
 
-func (pathSet *PathSet) Expand() (map[string]struct {}, error) {
-	s := make(map[string]struct {})
+func (pathSet *PathSet) Expand() (map[string]struct{}, error) {
+	s := make(map[string]struct{})
 	for _, pattern := range pathSet.patterns {
 		paths, err := ik.Glob(pathSet.fs, pattern)
 		if err != nil {
 			return nil, err
 		}
 		for _, path := range paths {
-			s[path] = struct {}{}
+			s[path] = struct{}{}
 		}
 	}
 	return s, nil
 }
 
 func newPathSet(fs http.FileSystem, patterns []string) *PathSet {
-	return &PathSet {
-		patterns: patterns, 
-		fs: fs,
+	return &PathSet{
+		patterns: patterns,
+		fs:       fs,
 	}
 }
 
@@ -1256,7 +1256,7 @@ func (factory *TailInputFactory) New(engine ik.Engine, config *ik.ConfigElement)
 	i := strings.IndexRune(tag, rune('*'))
 	if i >= 0 {
 		tagPrefix = tag[:i]
-		tagSuffix = tag[i + 1:]
+		tagSuffix = tag[i+1:]
 	} else {
 		tagPrefix = tag
 	}

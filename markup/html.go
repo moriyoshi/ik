@@ -1,15 +1,15 @@
 package markup
 
 import (
-	"html"
 	"github.com/moriyoshi/ik"
+	"html"
 )
 
 type HTMLRenderer struct {
 	Out Writer
 }
 
-var supportedAttrs = []int { ik.Embolden, ik.Underlined }
+var supportedAttrs = []int{ik.Embolden, ik.Underlined}
 
 func (renderer *HTMLRenderer) tag(style int) string {
 	if style == ik.Embolden {
@@ -29,7 +29,7 @@ func (renderer *HTMLRenderer) Render(markup *ik.Markup) {
 		chunkAttrs := int(chunk.Attrs)
 		removedAttrs := ^chunkAttrs & appliedAttrs
 		for _, supportedAttr := range supportedAttrs {
-			for removedAttrs & supportedAttr != 0 {
+			for removedAttrs&supportedAttr != 0 {
 				poppedStyle := styleStack.Pop()
 				out.WriteString("</")
 				out.WriteString(renderer.tag(poppedStyle))
@@ -40,7 +40,7 @@ func (renderer *HTMLRenderer) Render(markup *ik.Markup) {
 		}
 		newAttrs := chunkAttrs & ^appliedAttrs
 		for _, supportedAttr := range supportedAttrs {
-			if newAttrs & supportedAttr != 0 {
+			if newAttrs&supportedAttr != 0 {
 				styleStack.Append(supportedAttr)
 				out.WriteString("<")
 				out.WriteString(renderer.tag(supportedAttr))

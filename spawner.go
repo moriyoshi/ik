@@ -1,9 +1,9 @@
 package ik
 
 import (
-	"sync"
-	"reflect"
 	"fmt"
+	"reflect"
+	"sync"
 )
 
 type descriptorListHead struct {
@@ -29,15 +29,15 @@ type spawneeDescriptor struct {
 }
 
 type SpawneeStatus struct {
-	Id                int
-	Spawnee           Spawnee
-	ExitStatus        error
+	Id         int
+	Spawnee    Spawnee
+	ExitStatus error
 }
 
 type dispatchReturnValue struct {
-	b bool
-	s []Spawnee
-	e error
+	b  bool
+	s  []Spawnee
+	e  error
 	ss []SpawneeStatus
 }
 
@@ -78,7 +78,7 @@ func (panicked *Panicked) Error() string {
 		type_ := reflect.TypeOf(panic_)
 		method, ok := type_.MethodByName("String")
 		if ok && method.Type.NumIn() == 1 {
-			result := method.Func.Call([]reflect.Value { reflect.ValueOf(panic_) })
+			result := method.Func.Call([]reflect.Value{reflect.ValueOf(panic_)})
 			if len(result) == 1 && result[0].Type().Kind() == reflect.String {
 				return fmt.Sprintf("(%s) %s", typeName(type_), result[0].String())
 			}
@@ -127,7 +127,7 @@ func newDescriptor(spawnee Spawnee, id int) *spawneeDescriptor {
 
 func (spawner *Spawner) spawn(spawnee Spawnee, retval chan dispatchReturnValue) {
 	go func() {
-		descriptor := newDescriptor(spawnee, len(spawner.m) + 1)
+		descriptor := newDescriptor(spawnee, len(spawner.m)+1)
 		func() {
 			spawner.mtx.Lock()
 			defer spawner.mtx.Unlock()
@@ -154,7 +154,7 @@ func (spawner *Spawner) spawn(spawnee Spawnee, retval chan dispatchReturnValue) 
 			defer func() {
 				r := recover()
 				if r != nil {
-					exitStatus = &Panicked { r }
+					exitStatus = &Panicked{r}
 				}
 			}()
 			exitStatus = Continue
@@ -258,12 +258,11 @@ func (spawner *Spawner) getSpawneeStatuses(_ Spawnee, retval chan dispatchReturn
 	spawneeStatuses := make([]SpawneeStatus, len(spawner.m))
 	i := 0
 	for spawnee, descriptor := range spawner.m {
-		spawneeStatuses[i] = SpawneeStatus {Id: descriptor.id, Spawnee: spawnee, ExitStatus: descriptor.exitStatus}
+		spawneeStatuses[i] = SpawneeStatus{Id: descriptor.id, Spawnee: spawnee, ExitStatus: descriptor.exitStatus}
 		i += 1
 	}
 	retval <- dispatchReturnValue{false, nil, nil, spawneeStatuses}
 }
-
 
 func (spawner *Spawner) Spawn(spawnee Spawnee) error {
 	retval := make(chan dispatchReturnValue)

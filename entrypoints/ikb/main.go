@@ -1,27 +1,27 @@
 package main
 
 import (
-	"flag"
-	"os"
-	"net"
 	"bytes"
 	"encoding/json"
-	"reflect"
-	"time"
-	"log"
+	"flag"
 	"fmt"
-	"math"
-	"strconv"
-	"sync/atomic"
+	termutil "github.com/andrew-d/go-termutil"
 	"github.com/moriyoshi/ik"
 	"github.com/moriyoshi/ik/markup"
 	"github.com/ugorji/go/codec"
-	termutil "github.com/andrew-d/go-termutil"
+	"log"
+	"math"
+	"net"
+	"os"
+	"reflect"
+	"strconv"
+	"sync/atomic"
+	"time"
 )
 
 type Record struct {
 	Timestamp uint64
-	Data map[string]interface{}
+	Data      map[string]interface{}
 }
 
 type IkBench struct {
@@ -29,11 +29,11 @@ type IkBench struct {
 }
 
 type IkBenchReportData struct {
-	NumberOfRecordsSent int64
-	LongestSubmissionTime time.Duration
+	NumberOfRecordsSent    int64
+	LongestSubmissionTime  time.Duration
 	ShortestSubmissionTime time.Duration
-	Now time.Time
-	Start time.Time
+	Now                    time.Time
+	Start                  time.Time
 }
 
 type IkBenchReporter interface {
@@ -42,35 +42,35 @@ type IkBenchReporter interface {
 }
 
 type IkBenchParams struct {
-	Host string
-	Simple bool
-	NumberOfRecordsToSubmit int
+	Host                      string
+	Simple                    bool
+	NumberOfRecordsToSubmit   int
 	NumberOfRecordsSentAtOnce int
-	Concurrency int
-	Tag string
-	Data map[string]interface{}
-	MaxRetryCount int
-	ReportingFrequency int
-	Reporter IkBenchReporter
+	Concurrency               int
+	Tag                       string
+	Data                      map[string]interface{}
+	MaxRetryCount             int
+	ReportingFrequency        int
+	Reporter                  IkBenchReporter
 }
 
 func (ikb *IkBench) encodeEntrySingle(buf *bytes.Buffer, tag string, record Record) error {
 	enc := codec.NewEncoder(buf, &ikb.codec)
-	return enc.Encode([]interface{} { tag, record.Timestamp, record.Data })
+	return enc.Encode([]interface{}{tag, record.Timestamp, record.Data})
 }
 
 func (ikb *IkBench) encodeEntryBulk(buf *bytes.Buffer, tag string, records []Record) error {
 	enc := codec.NewEncoder(buf, &ikb.codec)
-	return enc.Encode([]interface{} { tag, records })
+	return enc.Encode([]interface{}{tag, records})
 }
 
 func (ikb *IkBench) Submit(conn net.Conn, params *IkBenchParams) error {
 	time_ := time.Now().Unix()
 	records := make([]Record, params.NumberOfRecordsSentAtOnce)
 	for i := 0; i < params.NumberOfRecordsSentAtOnce; i += 1 {
-		records[i] = Record { Timestamp: uint64(time_), Data: params.Data }
+		records[i] = Record{Timestamp: uint64(time_), Data: params.Data}
 	}
-	buf := bytes.Buffer {}
+	buf := bytes.Buffer{}
 	if params.Simple {
 		for _, record := range records {
 			err := ikb.encodeEntrySingle(&buf, params.Tag, record)
@@ -110,9 +110,12 @@ func (ikb *IkBench) Run(logger *log.Logger, params *IkBenchParams) {
 			var conn net.Conn
 			var err error
 			defer func() {
-				if conn != nil { conn.Close() }
+				if conn != nil {
+					conn.Close()
+				}
 			}()
-			outer: for i := 0; i < attempts; i += 1 {
+		outer:
+			for i := 0; i < attempts; i += 1 {
 				for {
 					if conn == nil {
 						for {
@@ -138,7 +141,7 @@ func (ikb *IkBench) Run(logger *log.Logger, params *IkBenchParams) {
 							if err_.Temporary() {
 								continue
 							}
-							closeErr:= conn.Close()
+							closeErr := conn.Close()
 							if closeErr != nil {
 								logger.Print(closeErr.Error())
 							}
@@ -156,12 +159,12 @@ func (ikb *IkBench) Run(logger *log.Logger, params *IkBenchParams) {
 					if longestSubmissionTime < submissionTime {
 						longestSubmissionTime = submissionTime
 					}
-					if atomic.AddInt64(&numberOfRecordsSent, int64(numberOfRecordsSentAtOnce)) % int64(reportingFrequency) == 0 {
-						params.Reporter.ReportRecordsSent(IkBenchReportData {
-							NumberOfRecordsSent: numberOfRecordsSent,
+					if atomic.AddInt64(&numberOfRecordsSent, int64(numberOfRecordsSentAtOnce))%int64(reportingFrequency) == 0 {
+						params.Reporter.ReportRecordsSent(IkBenchReportData{
+							NumberOfRecordsSent:    numberOfRecordsSent,
 							ShortestSubmissionTime: shortestSubmissionTime,
-							LongestSubmissionTime: longestSubmissionTime,
-							Now: now,
+							LongestSubmissionTime:  longestSubmissionTime,
+							Now:   now,
 							Start: start,
 						})
 					}
@@ -169,26 +172,26 @@ func (ikb *IkBench) Run(logger *log.Logger, params *IkBenchParams) {
 				}
 			}
 			sync <- id
-		}(i, numberOfAttemptsPerProc + r)
+		}(i, numberOfAttemptsPerProc+r)
 	}
 	for i := 0; i < params.Concurrency; i += 1 {
 		<-sync
 	}
-	params.Reporter.ReportFinal(IkBenchReportData {
-		NumberOfRecordsSent: numberOfRecordsSent,
+	params.Reporter.ReportFinal(IkBenchReportData{
+		NumberOfRecordsSent:    numberOfRecordsSent,
 		ShortestSubmissionTime: shortestSubmissionTime,
-		LongestSubmissionTime: longestSubmissionTime,
-		Now: time.Now(),
+		LongestSubmissionTime:  longestSubmissionTime,
+		Now:   time.Now(),
 		Start: start,
 	})
 }
 
 func NewIkBench() *IkBench {
-	codec_ := codec.MsgpackHandle {}
+	codec_ := codec.MsgpackHandle{}
 	codec_.MapType = reflect.TypeOf(map[string]interface{}(nil))
 	codec_.RawToString = false
 	codec_.StructToArray = true
-	return &IkBench { codec: codec_ }
+	return &IkBench{codec: codec_}
 }
 
 func usage() {
@@ -212,66 +215,66 @@ type defaultReporter struct {
 
 func (reporter *defaultReporter) ReportRecordsSent(data IkBenchReportData) {
 	elapsed := float64(data.Now.Sub(data.Start)) / 1e9
-	reporter.renderer.Render(&ik.Markup { []ik.MarkupChunk {
-		ik.MarkupChunk {
+	reporter.renderer.Render(&ik.Markup{[]ik.MarkupChunk{
+		ik.MarkupChunk{
 			Attrs: 0,
-			Text: fmt.Sprintf("%d records sent (%.3f seconds elapsed, %.3f records per second)\n", data.NumberOfRecordsSent, elapsed, float64(data.NumberOfRecordsSent) / elapsed),
+			Text:  fmt.Sprintf("%d records sent (%.3f seconds elapsed, %.3f records per second)\n", data.NumberOfRecordsSent, elapsed, float64(data.NumberOfRecordsSent)/elapsed),
 		},
-	} })
+	}})
 }
 
 func (reporter *defaultReporter) ReportFinal(data IkBenchReportData) {
 	elapsed := float64(data.Now.Sub(data.Start)) / 1e9
-	reporter.renderer.Render(&ik.Markup { []ik.MarkupChunk {
-		ik.MarkupChunk {
+	reporter.renderer.Render(&ik.Markup{[]ik.MarkupChunk{
+		ik.MarkupChunk{
 			Attrs: ik.Embolden | ik.Yellow,
-			Text: "Benchmark Duration: ",
+			Text:  "Benchmark Duration: ",
 		},
-		ik.MarkupChunk {
+		ik.MarkupChunk{
 			Attrs: ik.Embolden,
-			Text: fmt.Sprintf("%.3f seconds\n", elapsed),
+			Text:  fmt.Sprintf("%.3f seconds\n", elapsed),
 		},
-		ik.MarkupChunk {
+		ik.MarkupChunk{
 			Attrs: ik.Embolden | ik.Yellow,
-			Text: "Number of Records Submitted: ",
+			Text:  "Number of Records Submitted: ",
 		},
-		ik.MarkupChunk {
+		ik.MarkupChunk{
 			Attrs: ik.Embolden,
-			Text: fmt.Sprintf("%d\n", data.NumberOfRecordsSent),
+			Text:  fmt.Sprintf("%d\n", data.NumberOfRecordsSent),
 		},
-		ik.MarkupChunk {
+		ik.MarkupChunk{
 			Attrs: ik.Embolden | ik.Yellow,
-			Text: "Records per Second: ",
+			Text:  "Records per Second: ",
 		},
-		ik.MarkupChunk {
+		ik.MarkupChunk{
 			Attrs: ik.Embolden,
-			Text: fmt.Sprintf("%.3f\n", float64(data.NumberOfRecordsSent) / elapsed),
+			Text:  fmt.Sprintf("%.3f\n", float64(data.NumberOfRecordsSent)/elapsed),
 		},
-		ik.MarkupChunk {
+		ik.MarkupChunk{
 			Attrs: ik.Embolden | ik.Yellow,
-			Text: "Average Submission Time: ",
+			Text:  "Average Submission Time: ",
 		},
-		ik.MarkupChunk {
+		ik.MarkupChunk{
 			Attrs: ik.Embolden,
-			Text: fmt.Sprintf("%.10f seconds\n", elapsed / float64(data.NumberOfRecordsSent)),
+			Text:  fmt.Sprintf("%.10f seconds\n", elapsed/float64(data.NumberOfRecordsSent)),
 		},
-		ik.MarkupChunk {
+		ik.MarkupChunk{
 			Attrs: ik.Embolden,
-			Text: "    Shortest: ",
+			Text:  "    Shortest: ",
 		},
-		ik.MarkupChunk {
+		ik.MarkupChunk{
 			Attrs: ik.Embolden,
-			Text: fmt.Sprintf("%.10f seconds\n", float64(data.ShortestSubmissionTime) / 1e9),
+			Text:  fmt.Sprintf("%.10f seconds\n", float64(data.ShortestSubmissionTime)/1e9),
 		},
-		ik.MarkupChunk {
+		ik.MarkupChunk{
 			Attrs: ik.Embolden,
-			Text: "    Longest: ",
+			Text:  "    Longest: ",
 		},
-		ik.MarkupChunk {
+		ik.MarkupChunk{
 			Attrs: ik.Embolden,
-			Text: fmt.Sprintf("%.10f seconds\n", float64(data.LongestSubmissionTime) / 1e9),
+			Text:  fmt.Sprintf("%.10f seconds\n", float64(data.LongestSubmissionTime)/1e9),
 		},
-	} })
+	}})
 }
 
 func main() {
@@ -302,32 +305,32 @@ func main() {
 	if err != nil {
 		exitWithError(err, 255)
 	}
-	if numberOfRecordsToSubmit % numberOfRecordsSentAtOnce != 0 {
+	if numberOfRecordsToSubmit%numberOfRecordsSentAtOnce != 0 {
 		exitWithMessage("the value of 'count' must be a multiple of 'multi'", 255)
 	}
-	if numberOfRecordsToSubmit / numberOfRecordsSentAtOnce < concurrency {
+	if numberOfRecordsToSubmit/numberOfRecordsSentAtOnce < concurrency {
 		exitWithMessage("the value of 'concurrency' must be equal to or greater than the division of 'count' by 'multi'", 255)
 	}
 	var renderer markup.MarkupRenderer
 	if termutil.Isatty(os.Stdout.Fd()) {
-		renderer = &markup.TerminalEscapeRenderer { os.Stdout }
+		renderer = &markup.TerminalEscapeRenderer{os.Stdout}
 	} else {
-		renderer = &markup.PlainRenderer { os.Stdout }
+		renderer = &markup.PlainRenderer{os.Stdout}
 	}
 	ikb := NewIkBench()
 	ikb.Run(
-		&log.Logger {},
-		&IkBenchParams {
-			Host: host,
-			Simple: simple,
-			NumberOfRecordsToSubmit: numberOfRecordsToSubmit,
+		&log.Logger{},
+		&IkBenchParams{
+			Host:                      host,
+			Simple:                    simple,
+			NumberOfRecordsToSubmit:   numberOfRecordsToSubmit,
 			NumberOfRecordsSentAtOnce: numberOfRecordsSentAtOnce,
-			Concurrency: concurrency,
-			Tag: tag,
-			Data: data,
-			MaxRetryCount: 5,
-			ReportingFrequency: int(math.Max(math.Pow(10, math.Ceil(math.Log10(float64(numberOfRecordsToSubmit))) - 1), 100)),
-			Reporter: &defaultReporter { renderer: renderer },
+			Concurrency:               concurrency,
+			Tag:                       tag,
+			Data:                      data,
+			MaxRetryCount:             5,
+			ReportingFrequency:        int(math.Max(math.Pow(10, math.Ceil(math.Log10(float64(numberOfRecordsToSubmit)))-1), 100)),
+			Reporter:                  &defaultReporter{renderer: renderer},
 		},
 	)
 }

@@ -1,15 +1,15 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"github.com/moriyoshi/ik"
-	"github.com/moriyoshi/ik/plugins"
 	"github.com/moriyoshi/ik/parsers"
+	"github.com/moriyoshi/ik/plugins"
 	"log"
 	"os"
 	"path"
-	"errors"
 )
 
 func usage() {
@@ -19,8 +19,8 @@ func usage() {
 }
 
 func configureScoreboards(logger *log.Logger, registry *MultiFactoryRegistry, engine ik.Engine, config *ik.Config) error {
-       for _, v := range config.Root.Elems {
-	       switch v.Name {
+	for _, v := range config.Root.Elems {
+		switch v.Name {
 		case "scoreboard":
 			type_ := v.Attrs["type"]
 			scoreboardFactory := registry.LookupScoreboardFactory(type_)
@@ -79,11 +79,11 @@ func main() {
 		registry.RegisterLineParserPlugin(_plugin)
 	}
 
-	registry.RegisterScoreboardFactory(&HTMLHTTPScoreboardFactory {})
+	registry.RegisterScoreboardFactory(&HTMLHTTPScoreboardFactory{})
 
 	router := ik.NewFluentRouter()
 	engine := ik.NewEngine(logger, opener, registry, scorekeeper, router)
-	defer func () {
+	defer func() {
 		err := engine.Dispose()
 		if err != nil {
 			engine.Logger().Println(err.Error())

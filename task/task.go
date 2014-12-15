@@ -5,14 +5,14 @@ import (
 	"reflect"
 )
 
-type NotCompletedStatus struct {}
+type NotCompletedStatus struct{}
 
-var NotCompleted = &NotCompletedStatus {}
+var NotCompleted = &NotCompletedStatus{}
 
 func (_ *NotCompletedStatus) Error() string { return "" }
 
 type PanickedStatus struct {
-	panic interface {}
+	panic interface{}
 }
 
 func typeName(type_ reflect.Type) string {
@@ -33,7 +33,7 @@ func (panicked *PanickedStatus) Error() string {
 		type_ := reflect.TypeOf(panic_)
 		method, ok := type_.MethodByName("String")
 		if ok && method.Type.NumIn() == 1 {
-			result := method.Func.Call([]reflect.Value { reflect.ValueOf(panic_) })
+			result := method.Func.Call([]reflect.Value{reflect.ValueOf(panic_)})
 			if len(result) == 1 && result[0].Type().Kind() == reflect.String {
 				return fmt.Sprintf("(%s) %s", typeName(type_), result[0].String())
 			}
@@ -44,11 +44,10 @@ func (panicked *PanickedStatus) Error() string {
 
 type TaskStatus interface {
 	Status() error
-	Result() interface {}
+	Result() interface{}
 	Poll()
 }
 
 type TaskRunner interface {
-	Run(func () (interface {}, error)) (TaskStatus, error)
+	Run(func() (interface{}, error)) (TaskStatus, error)
 }
-

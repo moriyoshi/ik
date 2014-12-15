@@ -6,16 +6,16 @@ import (
 	"unsafe"
 )
 
-type SlicerNewKeyEventListener func (last Journal, next Journal) error
+type SlicerNewKeyEventListener func(last Journal, next Journal) error
 
 type Slicer struct {
-	journalGroup JournalGroup
-	keyGetter func (record FluentRecord) string
-	packer RecordPacker
-	logger *log.Logger
-	keys map[string]bool
+	journalGroup         JournalGroup
+	keyGetter            func(record FluentRecord) string
+	packer               RecordPacker
+	logger               *log.Logger
+	keys                 map[string]bool
 	newKeyEventListeners map[uintptr]SlicerNewKeyEventListener
-	mtx sync.Mutex
+	mtx                  sync.Mutex
 }
 
 func (slicer *Slicer) notifySlicerNewKeyEventListeners(last Journal, next Journal) {
@@ -41,7 +41,7 @@ func (slicer *Slicer) Emit(recordSets []FluentRecordSet) error {
 	for _, recordSet := range recordSets {
 		tag := recordSet.Tag
 		for _, record := range recordSet.Records {
-			fullRecord := FluentRecord {
+			fullRecord := FluentRecord{
 				tag,
 				record.Timestamp,
 				record.Data,
@@ -73,18 +73,18 @@ func (slicer *Slicer) Emit(recordSets []FluentRecordSet) error {
 	return nil
 }
 
-func NewSlicer(journalGroup JournalGroup, keyGetter func (record FluentRecord) string, packer RecordPacker, logger *log.Logger) *Slicer {
+func NewSlicer(journalGroup JournalGroup, keyGetter func(record FluentRecord) string, packer RecordPacker, logger *log.Logger) *Slicer {
 	keys := make(map[string]bool)
 	for _, key := range journalGroup.GetJournalKeys() {
 		keys[key] = true
 	}
-	return &Slicer {
-		journalGroup: journalGroup,
-		keyGetter: keyGetter,
-		packer: packer,
-		logger: logger,
-		keys: keys,
+	return &Slicer{
+		journalGroup:         journalGroup,
+		keyGetter:            keyGetter,
+		packer:               packer,
+		logger:               logger,
+		keys:                 keys,
 		newKeyEventListeners: make(map[uintptr]SlicerNewKeyEventListener),
-		mtx: sync.Mutex {},
+		mtx:                  sync.Mutex{},
 	}
 }

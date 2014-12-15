@@ -131,7 +131,7 @@ func (router *FluentRouter) Emit(recordSets []FluentRecordSet) error {
 				if !ok {
 					recordSetsForPort = make([]FluentRecordSet, 0)
 				} else {
-					lastRecordSets := &recordSetsForPort[len(recordSetsForPort) - 1]
+					lastRecordSets := &recordSetsForPort[len(recordSetsForPort)-1]
 					if &lastRecordSets.Records == &recordSet.Records {
 						continue
 					}

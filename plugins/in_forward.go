@@ -1,9 +1,9 @@
 package plugins
 
 import (
-	"github.com/moriyoshi/ik"
 	"errors"
 	"fmt"
+	"github.com/moriyoshi/ik"
 	"github.com/ugorji/go/codec"
 	"io"
 	"log"
@@ -33,9 +33,9 @@ type ForwardInput struct {
 	entries  int64
 }
 
-type EntryCountTopic struct {}
+type EntryCountTopic struct{}
 
-type ConnectionCountTopic struct {}
+type ConnectionCountTopic struct{}
 
 type ForwardInputFactory struct {
 }
@@ -56,25 +56,25 @@ func decodeRecordSet(tag []byte, entries []interface{}) (ik.FluentRecordSet, err
 	for i, _entry := range entries {
 		entry, ok := _entry.([]interface{})
 		if !ok {
-			return ik.FluentRecordSet {}, errors.New("Failed to decode recordSet")
+			return ik.FluentRecordSet{}, errors.New("Failed to decode recordSet")
 		}
 		timestamp, ok := entry[0].(uint64)
 		if !ok {
-			return ik.FluentRecordSet {}, errors.New("Failed to decode timestamp field")
+			return ik.FluentRecordSet{}, errors.New("Failed to decode timestamp field")
 		}
 		data, ok := entry[1].(map[string]interface{})
 		if !ok {
-			return ik.FluentRecordSet {}, errors.New("Failed to decode data field")
+			return ik.FluentRecordSet{}, errors.New("Failed to decode data field")
 		}
 		coerceInPlace(data)
-		records[i] = ik.TinyFluentRecord {
+		records[i] = ik.TinyFluentRecord{
 			Timestamp: timestamp,
 			Data:      data,
 		}
 	}
-	return ik.FluentRecordSet {
-		Tag:       string(tag), // XXX: byte => rune
-		Records:   records,
+	return ik.FluentRecordSet{
+		Tag:     string(tag), // XXX: byte => rune
+		Records: records,
 	}, nil
 }
 
@@ -98,10 +98,10 @@ func (c *forwardClient) decodeEntries() ([]ik.FluentRecordSet, error) {
 			return nil, errors.New("Failed to decode data field")
 		}
 		coerceInPlace(data)
-		retval = []ik.FluentRecordSet {
+		retval = []ik.FluentRecordSet{
 			{
-				Tag:       string(tag), // XXX: byte => rune
-				Records: []ik.TinyFluentRecord {
+				Tag: string(tag), // XXX: byte => rune
+				Records: []ik.TinyFluentRecord{
 					{
 						Timestamp: timestamp,
 						Data:      data,
@@ -115,10 +115,10 @@ func (c *forwardClient) decodeEntries() ([]ik.FluentRecordSet, error) {
 		if !ok {
 			return nil, errors.New("Failed to decode data field")
 		}
-		retval = []ik.FluentRecordSet {
+		retval = []ik.FluentRecordSet{
 			{
-				Tag:       string(tag), // XXX: byte => rune
-				Records: []ik.TinyFluentRecord {
+				Tag: string(tag), // XXX: byte => rune
+				Records: []ik.TinyFluentRecord{
 					{
 						Timestamp: timestamp,
 						Data:      data,
@@ -134,7 +134,7 @@ func (c *forwardClient) decodeEntries() ([]ik.FluentRecordSet, error) {
 		if err != nil {
 			return nil, err
 		}
-		retval = []ik.FluentRecordSet { recordSet }
+		retval = []ik.FluentRecordSet{recordSet}
 	case []byte:
 		entries := make([]interface{}, 0)
 		err := codec.NewDecoderBytes(timestamp_or_entries, c.codec).Decode(&entries)
@@ -145,14 +145,13 @@ func (c *forwardClient) decodeEntries() ([]ik.FluentRecordSet, error) {
 		if err != nil {
 			return nil, err
 		}
-		retval = []ik.FluentRecordSet { recordSet }
+		retval = []ik.FluentRecordSet{recordSet}
 	default:
 		return nil, errors.New(fmt.Sprintf("Unknown type: %t", timestamp_or_entries))
 	}
 	atomic.AddInt64(&c.input.entries, int64(len(retval)))
 	return retval, nil
 }
-
 
 func handleInner(c *forwardClient) bool {
 	recordSets, err := c.decodeEntries()
@@ -165,7 +164,7 @@ func handleInner(c *forwardClient) bool {
 		}
 	}()
 	if err == nil {
-		return true;
+		return true
 	}
 
 	err_, ok := err.(net.Error)
@@ -184,7 +183,8 @@ func handleInner(c *forwardClient) bool {
 }
 
 func (c *forwardClient) handle() {
-	for handleInner(c) {}
+	for handleInner(c) {
+	}
 	err := c.conn.Close()
 	if err != nil {
 		c.logger.Print(err.Error())
@@ -284,28 +284,28 @@ func (factory *ForwardInputFactory) New(engine ik.Engine, config *ik.ConfigEleme
 }
 
 func (factory *ForwardInputFactory) BindScorekeeper(scorekeeper *ik.Scorekeeper) {
-	scorekeeper.AddTopic(ik.ScorekeeperTopic {
-		Plugin: factory,
-		Name: "entries",
+	scorekeeper.AddTopic(ik.ScorekeeperTopic{
+		Plugin:      factory,
+		Name:        "entries",
 		DisplayName: "Total number of entries",
 		Description: "Total number of entries received so far",
-		Fetcher: &EntryCountTopic {},
+		Fetcher:     &EntryCountTopic{},
 	})
-	scorekeeper.AddTopic(ik.ScorekeeperTopic {
-		Plugin: factory,
-		Name: "connections",
+	scorekeeper.AddTopic(ik.ScorekeeperTopic{
+		Plugin:      factory,
+		Name:        "connections",
 		DisplayName: "Connections",
 		Description: "Number of connections currently handled",
-		Fetcher: &ConnectionCountTopic {},
+		Fetcher:     &ConnectionCountTopic{},
 	})
 }
 
 func (topic *EntryCountTopic) Markup(input_ ik.PluginInstance) (ik.Markup, error) {
 	text, err := topic.PlainText(input_)
 	if err != nil {
-		return ik.Markup {}, err
+		return ik.Markup{}, err
 	}
-	return ik.Markup { []ik.MarkupChunk { { Text: text } } }, nil
+	return ik.Markup{[]ik.MarkupChunk{{Text: text}}}, nil
 }
 
 func (topic *EntryCountTopic) PlainText(input_ ik.PluginInstance) (string, error) {
@@ -316,9 +316,9 @@ func (topic *EntryCountTopic) PlainText(input_ ik.PluginInstance) (string, error
 func (topic *ConnectionCountTopic) Markup(input_ ik.PluginInstance) (ik.Markup, error) {
 	text, err := topic.PlainText(input_)
 	if err != nil {
-		return ik.Markup {}, err
+		return ik.Markup{}, err
 	}
-	return ik.Markup { []ik.MarkupChunk { { Text: text } } }, nil
+	return ik.Markup{[]ik.MarkupChunk{{Text: text}}}, nil
 }
 
 func (topic *ConnectionCountTopic) PlainText(input_ ik.PluginInstance) (string, error) {

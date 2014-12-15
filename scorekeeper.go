@@ -1,9 +1,9 @@
 package ik
 
 import (
-	"log"
-	"fmt"
 	"errors"
+	"fmt"
+	"log"
 )
 
 type Scorekeeper struct {
@@ -24,7 +24,7 @@ func (sk *Scorekeeper) GetPlugins() []Plugin {
 func (sk *Scorekeeper) GetTopics(plugin Plugin) []ScorekeeperTopic {
 	entries, ok := sk.topics[plugin]
 	if !ok {
-		return []ScorekeeperTopic {}
+		return []ScorekeeperTopic{}
 	}
 	topics := make([]ScorekeeperTopic, len(entries))
 	i := 0

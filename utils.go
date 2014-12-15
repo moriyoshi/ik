@@ -1,10 +1,10 @@
 package ik
 
 import (
-	"strconv"
-	"regexp"
 	"errors"
 	"math/rand"
+	"regexp"
+	"strconv"
 	"time"
 )
 
@@ -24,27 +24,27 @@ func ParseCapacityString(s string) (int64, error) {
 	multiply := int64(1)
 	if len(m[2]) > 0 {
 		switch m[2][0] {
-			case 'e', 'E':
-				multiply *= base
-				fallthrough
-			case 'p', 'P':
-				multiply *= base
-				fallthrough
-			case 't', 'T':
-				multiply *= base
-				fallthrough
-			case 'g', 'G':
-				multiply *= base
-				fallthrough
-			case 'm', 'M':
-				multiply *= base
-				fallthrough
-			case 'k', 'K':
-				multiply *= base
+		case 'e', 'E':
+			multiply *= base
+			fallthrough
+		case 'p', 'P':
+			multiply *= base
+			fallthrough
+		case 't', 'T':
+			multiply *= base
+			fallthrough
+		case 'g', 'G':
+			multiply *= base
+			fallthrough
+		case 'm', 'M':
+			multiply *= base
+			fallthrough
+		case 'k', 'K':
+			multiply *= base
 		}
 	}
 	i, err := strconv.ParseInt(m[1], 10, 64)
-	if err != nil || multiply * i < i {
+	if err != nil || multiply*i < i {
 		return -1, errors.New("Invalid format (out of range): " + s)
 	}
 	return multiply * i, nil

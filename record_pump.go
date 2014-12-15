@@ -36,15 +36,15 @@ func (pump *RecordPump) Run() error {
 			buffer := pump.buffer
 			recordSet, ok := buffer[record.Tag]
 			if !ok {
-				recordSet = &FluentRecordSet {
-					Tag: record.Tag,
+				recordSet = &FluentRecordSet{
+					Tag:     record.Tag,
 					Records: make([]TinyFluentRecord, 0, 16),
 				}
 				buffer[record.Tag] = recordSet
 			}
-			recordSet.Records = append(recordSet.Records, TinyFluentRecord {
+			recordSet.Records = append(recordSet.Records, TinyFluentRecord{
 				Timestamp: record.Timestamp,
-				Data: record.Data,
+				Data:      record.Data,
 			})
 			break
 		case <-pump.heartbeat.C:
@@ -70,7 +70,7 @@ func (pump *RecordPump) Shutdown() error {
 }
 
 func NewRecordPump(port Port, backlog int) *RecordPump {
-	return &RecordPump {
+	return &RecordPump{
 		port:      port,
 		ch:        make(chan FluentRecord, backlog),
 		control:   make(chan bool, 1),

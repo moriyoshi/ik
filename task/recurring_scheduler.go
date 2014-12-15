@@ -1,27 +1,27 @@
 package task
 
 import (
-	"time"
-	"sort"
 	"errors"
+	"sort"
 	"sync/atomic"
+	"time"
 )
 
 type RecurringTaskSpec struct {
-	month []int
-	dayOfWeek []int
+	month      []int
+	dayOfWeek  []int
 	dayOfMonth []int
-	hour []int
-	minute []int
-	rightAt time.Time
+	hour       []int
+	minute     []int
+	rightAt    time.Time
 }
 
 type RecurringTaskDescriptor struct {
-	id int64
-	spec RecurringTaskSpec
+	id       int64
+	spec     RecurringTaskSpec
 	nextTime time.Time
-	status int
-	fn func (int64, time.Time, *RecurringTaskSpec) (interface {}, error)
+	status   int
+	fn       func(int64, time.Time, *RecurringTaskSpec) (interface{}, error)
 }
 
 type RecurringTaskDescriptorHeap []*RecurringTaskDescriptor
@@ -53,34 +53,36 @@ const (
 
 type RecurringTaskDaemonCommandResult struct {
 	descriptor *RecurringTaskDescriptor
-	diff time.Duration
+	diff       time.Duration
 }
 
 type RecurringTaskDaemonCommand struct {
-	command int
+	command    int
 	descriptor *RecurringTaskDescriptor
-	time time.Time
-	result chan RecurringTaskDaemonCommandResult
+	time       time.Time
+	result     chan RecurringTaskDaemonCommandResult
 }
 
 type RecurringTaskScheduler struct {
-	pQueue RecurringTaskDescriptorHeap
-	nowGetter func () time.Time
+	pQueue     RecurringTaskDescriptorHeap
+	nowGetter  func() time.Time
 	taskRunner TaskRunner
 	daemonChan chan RecurringTaskDaemonCommand
-	nextId int64
+	nextId     int64
 }
 
 func (heap *RecurringTaskDescriptorHeap) insert(elem *RecurringTaskDescriptor) {
 	l := len(*heap)
-	if cap(*heap) < l + 1 {
+	if cap(*heap) < l+1 {
 		newCap := cap(*heap) * 2
-		if newCap < cap(*heap) { panic("?") }
-		newHeap := make([]*RecurringTaskDescriptor, newCap, l + 1)
+		if newCap < cap(*heap) {
+			panic("?")
+		}
+		newHeap := make([]*RecurringTaskDescriptor, newCap, l+1)
 		copy(newHeap, *heap)
 		*heap = newHeap
 	} else {
-		*heap = (*heap)[0:l + 1]
+		*heap = (*heap)[0 : l+1]
 	}
 	(*heap)[l] = elem
 	heap.bubbleUp(l)
@@ -102,7 +104,7 @@ func (heap *RecurringTaskDescriptorHeap) update(elem *RecurringTaskDescriptor) {
 		panic("should never happen")
 	}
 	_heap := *heap
-	copy(_heap[i:], _heap[i + 1:])
+	copy(_heap[i:], _heap[i+1:])
 	i = len(_heap) - 1
 	_heap[i] = elem
 	heap.bubbleUp(i)
@@ -114,9 +116,9 @@ func (heap *RecurringTaskDescriptorHeap) delete(elem *RecurringTaskDescriptor) {
 		panic("should never happen")
 	}
 	_heap := *heap
-	copy(_heap[i:], _heap[i + 1:])
+	copy(_heap[i:], _heap[i+1:])
 	// readjust the capacity
-	*heap = _heap[0:len(_heap) - 1]
+	*heap = _heap[0 : len(_heap)-1]
 }
 
 func (heap *RecurringTaskDescriptorHeap) bubbleUp(i int) {
@@ -136,7 +138,7 @@ func (heap *RecurringTaskDescriptorHeap) bubbleUp(i int) {
 }
 
 func (spec *RecurringTaskSpec) copy() RecurringTaskSpec {
-	retval := RecurringTaskSpec {}
+	retval := RecurringTaskSpec{}
 	if spec.month != nil {
 		retval.month = make([]int, len(spec.month))
 		copy(retval.month, spec.month)
@@ -174,25 +176,25 @@ func (spec *RecurringTaskSpec) isZero() bool {
 }
 
 type timeStruct struct {
-	second int
-	minute int
-	hour int
-	day int
-	month time.Month
-	year int
+	second   int
+	minute   int
+	hour     int
+	day      int
+	month    time.Month
+	year     int
 	location *time.Location
 }
 
 func newTimeStruct(t time.Time) timeStruct {
 	currentYear, currentMonth, currentDay := t.Date()
 	currentHour, currentMinute, currentSecond := t.Clock()
-	return timeStruct {
-		second: currentSecond,
-		minute: currentMinute,
-		hour: currentHour,
-		day: currentDay,
-		month: currentMonth,
-		year: currentYear,
+	return timeStruct{
+		second:   currentSecond,
+		minute:   currentMinute,
+		hour:     currentHour,
+		day:      currentDay,
+		month:    currentMonth,
+		year:     currentYear,
 		location: t.Location(),
 	}
 }
@@ -202,7 +204,7 @@ func (tm *timeStruct) toTime() time.Time {
 }
 
 func daysIn(month time.Month, year int) int {
-	return time.Date(year, month + 1, 1, 0, 0, 0, 0, time.UTC).Add(-time.Hour).Day()
+	return time.Date(year, month+1, 1, 0, 0, 0, 0, time.UTC).Add(-time.Hour).Day()
 }
 
 func (spec *RecurringTaskSpec) resolution() RecurringTaskTimeResolution {
@@ -249,7 +251,7 @@ func incrementByResolution(t time.Time, res RecurringTaskTimeResolution, amount 
 
 func (spec *RecurringTaskSpec) nextTime(now time.Time) (time.Time, error) {
 	tm := newTimeStruct(now)
-	next := timeStruct { 0, -1, -1, -1, -1, tm.year, tm.location }
+	next := timeStruct{0, -1, -1, -1, -1, tm.year, tm.location}
 
 	if !spec.rightAt.IsZero() {
 		return spec.rightAt, nil
@@ -257,7 +259,7 @@ func (spec *RecurringTaskSpec) nextTime(now time.Time) (time.Time, error) {
 
 	if spec.minute != nil {
 		if len(spec.minute) == 0 {
-			return time.Time {}, errors.New("invalid time spec")
+			return time.Time{}, errors.New("invalid time spec")
 		}
 		for _, minute := range spec.minute {
 			if minute >= tm.minute {
@@ -279,7 +281,7 @@ func (spec *RecurringTaskSpec) nextTime(now time.Time) (time.Time, error) {
 
 	if spec.hour != nil {
 		if len(spec.hour) == 0 {
-			return time.Time {}, errors.New("invalid time spec")
+			return time.Time{}, errors.New("invalid time spec")
 		}
 		for _, hour := range spec.hour {
 			if hour >= tm.hour {
@@ -312,7 +314,7 @@ func (spec *RecurringTaskSpec) nextTime(now time.Time) (time.Time, error) {
 	nextDayCandidate1 := -1
 	if spec.dayOfWeek != nil {
 		if len(spec.dayOfWeek) == 0 {
-			return time.Time {}, errors.New("invalid time spec")
+			return time.Time{}, errors.New("invalid time spec")
 		}
 		currentDayOfWeek := (&tm).toTime().Weekday()
 		dayOfWeek := -1
@@ -331,7 +333,7 @@ func (spec *RecurringTaskSpec) nextTime(now time.Time) (time.Time, error) {
 	nextDayCandidate2 := -1
 	if spec.dayOfMonth != nil {
 		if len(spec.dayOfMonth) == 0 {
-			return time.Time {}, errors.New("invalid time spec")
+			return time.Time{}, errors.New("invalid time spec")
 		}
 		for _, dayOfMonth := range spec.dayOfMonth {
 			if dayOfMonth >= tm.day {
@@ -364,7 +366,7 @@ func (spec *RecurringTaskSpec) nextTime(now time.Time) (time.Time, error) {
 
 	if spec.month != nil {
 		if len(spec.dayOfMonth) == 0 {
-			return time.Time {}, errors.New("invalid time spec")
+			return time.Time{}, errors.New("invalid time spec")
 		}
 		for _, month := range spec.month {
 			if month >= int(tm.month) {
@@ -386,21 +388,21 @@ func (spec *RecurringTaskSpec) nextTime(now time.Time) (time.Time, error) {
 func (sched *RecurringTaskScheduler) RunNext() (time.Duration, TaskStatus, error) {
 	now := sched.nowGetter()
 	resultChan := make(chan RecurringTaskDaemonCommandResult)
-	sched.daemonChan <- RecurringTaskDaemonCommand { TryPop, nil, now, resultChan }
+	sched.daemonChan <- RecurringTaskDaemonCommand{TryPop, nil, now, resultChan}
 	result := <-resultChan
 	descr := result.descriptor
 	remaining := result.diff
 	if remaining > 0 {
 		return remaining, nil, nil
 	}
-	taskStatus, err := sched.taskRunner.Run(func () (interface {}, error) {
+	taskStatus, err := sched.taskRunner.Run(func() (interface{}, error) {
 		spec := (&descr.spec).copy()
 		result, err := descr.fn(descr.id, now, &spec)
 		if err != nil {
 			return nil, err
 		}
 		if spec.isZero() {
-			sched.daemonChan <- RecurringTaskDaemonCommand { Delete, descr, time.Time {}, nil }
+			sched.daemonChan <- RecurringTaskDaemonCommand{Delete, descr, time.Time{}, nil}
 		} else {
 			_now := sched.nowGetter()
 			res := (&spec).resolution()
@@ -416,7 +418,7 @@ func (sched *RecurringTaskScheduler) RunNext() (time.Duration, TaskStatus, error
 				_now = incrementByResolution(_now, res, 1)
 			}
 			descr.spec = spec // XXX: hope this is safe
-			sched.daemonChan <- RecurringTaskDaemonCommand { Update, descr, nextTime, nil }
+			sched.daemonChan <- RecurringTaskDaemonCommand{Update, descr, nextTime, nil}
 		}
 		return result, nil
 	})
@@ -424,7 +426,7 @@ func (sched *RecurringTaskScheduler) RunNext() (time.Duration, TaskStatus, error
 }
 
 func (sched *RecurringTaskScheduler) NoOp() {
-	sched.daemonChan <- RecurringTaskDaemonCommand { NoOp, nil, time.Time {}, nil }
+	sched.daemonChan <- RecurringTaskDaemonCommand{NoOp, nil, time.Time{}, nil}
 }
 
 func (sched *RecurringTaskScheduler) ProcessEvent() {
@@ -446,7 +448,7 @@ func (sched *RecurringTaskScheduler) ProcessEvent() {
 			descr.status = Running
 			(&sched.pQueue).update(descr)
 		}
-		cmd.result <- RecurringTaskDaemonCommandResult { descr, diff }
+		cmd.result <- RecurringTaskDaemonCommandResult{descr, diff}
 	case Delete:
 		(&sched.pQueue).delete(cmd.descriptor)
 	case NoOp:
@@ -464,28 +466,28 @@ func (sched *RecurringTaskScheduler) RegisterTask(spec RecurringTaskSpec, task f
 	spec = (&spec).copy()
 	(&spec).ensureSorted()
 	id := sched._nextId()
-	descr := &RecurringTaskDescriptor {
-		id: id,
-		spec: spec,
-		nextTime: time.Time {},
-		status: Stopped,
-		fn: task,
+	descr := &RecurringTaskDescriptor{
+		id:       id,
+		spec:     spec,
+		nextTime: time.Time{},
+		status:   Stopped,
+		fn:       task,
 	}
 	nextTime, err := spec.nextTime(sched.nowGetter())
 	if err != nil {
 		return -1, err
 	}
 	descr.nextTime = nextTime
-	sched.daemonChan <- RecurringTaskDaemonCommand { Insert, descr, time.Time {}, nil }
+	sched.daemonChan <- RecurringTaskDaemonCommand{Insert, descr, time.Time{}, nil}
 	return id, nil
 }
 
 func NewRecurringTaskScheduler(nowGetter func() time.Time, taskRunner TaskRunner) *RecurringTaskScheduler {
-	return &RecurringTaskScheduler {
-		pQueue: make(RecurringTaskDescriptorHeap, 0, 16),
-		nowGetter: nowGetter,
+	return &RecurringTaskScheduler{
+		pQueue:     make(RecurringTaskDescriptorHeap, 0, 16),
+		nowGetter:  nowGetter,
 		taskRunner: taskRunner,
 		daemonChan: make(chan RecurringTaskDaemonCommand, 1),
-		nextId: 0,
+		nextId:     0,
 	}
 }

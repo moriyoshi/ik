@@ -5,10 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"path"
-	"log"
 	"regexp"
 	"strings"
 )
@@ -242,15 +242,15 @@ func ParseConfig(opener Opener, filename string) (*Config, error) {
 }
 
 type FluentConfigurer struct {
-	logger *log.Logger
-	router *FluentRouter
-	inputFactoryRegistry InputFactoryRegistry
+	logger                *log.Logger
+	router                *FluentRouter
+	inputFactoryRegistry  InputFactoryRegistry
 	outputFactoryRegistry OutputFactoryRegistry
 }
 
 func (configurer *FluentConfigurer) Configure(engine Engine, config *Config) error {
-       for _, v := range config.Root.Elems {
-	       switch v.Name {
+	for _, v := range config.Root.Elems {
+		switch v.Name {
 		case "source":
 			type_ := v.Attrs["type"]
 			inputFactory := configurer.inputFactoryRegistry.LookupInputFactory(type_)
@@ -288,10 +288,10 @@ func (configurer *FluentConfigurer) Configure(engine Engine, config *Config) err
 }
 
 func NewFluentConfigurer(logger *log.Logger, inputFactoryRegistry InputFactoryRegistry, outputFactoryRegistry OutputFactoryRegistry, router *FluentRouter) *FluentConfigurer {
-	return &FluentConfigurer {
-		logger: logger,
-		router: router,
-		inputFactoryRegistry: inputFactoryRegistry,
+	return &FluentConfigurer{
+		logger:                logger,
+		router:                router,
+		inputFactoryRegistry:  inputFactoryRegistry,
 		outputFactoryRegistry: outputFactoryRegistry,
 	}
 }

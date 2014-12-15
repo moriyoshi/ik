@@ -22,7 +22,7 @@ func (foo *Foo) Shutdown() error {
 	return nil
 }
 
-type Bar struct { c chan interface{} }
+type Bar struct{ c chan interface{} }
 
 func (bar *Bar) Run() error {
 	panic(<-bar.c)
@@ -32,7 +32,7 @@ func (bar *Bar) Shutdown() error {
 	return nil
 }
 
-type Baz struct { message string }
+type Baz struct{ message string }
 
 func (baz *Baz) String() string {
 	return baz.message
@@ -85,7 +85,7 @@ func TestSpawner_Panic2(t *testing.T) {
 	if err != Continue {
 		t.Fail()
 	}
-	f.c <- &Baz { "BAZ!" }
+	f.c <- &Baz{"BAZ!"}
 	spawner.Poll(f)
 	err = spawner.GetStatus(f)
 	panicked, ok := err.(*Panicked)

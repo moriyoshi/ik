@@ -1,8 +1,8 @@
 package plugins
 
 import (
-	"github.com/moriyoshi/ik"
 	"bytes"
+	"github.com/moriyoshi/ik"
 	"github.com/ugorji/go/codec"
 	"log"
 	"net"
@@ -22,7 +22,7 @@ type ForwardOutput struct {
 }
 
 func (output *ForwardOutput) encodeEntry(tag string, record ik.TinyFluentRecord) error {
-	v := []interface{} { tag, record.Timestamp, record.Data }
+	v := []interface{}{tag, record.Timestamp, record.Data}
 	if output.enc == nil {
 		output.enc = codec.NewEncoder(&output.buffer, output.codec)
 	}
@@ -34,7 +34,7 @@ func (output *ForwardOutput) encodeEntry(tag string, record ik.TinyFluentRecord)
 }
 
 func (output *ForwardOutput) encodeRecordSet(recordSet ik.FluentRecordSet) error {
-	v := []interface{} { recordSet.Tag, recordSet.Records }
+	v := []interface{}{recordSet.Tag, recordSet.Records}
 	if output.enc == nil {
 		output.enc = codec.NewEncoder(&output.buffer, output.codec)
 	}

@@ -1,14 +1,14 @@
 package ik
 
 import (
-	"log"
-	"time"
-	"math/rand"
 	"github.com/moriyoshi/ik/task"
+	"log"
+	"math/rand"
+	"time"
 )
 
 type recurringTaskDaemon struct {
-	engine *engineImpl
+	engine   *engineImpl
 	shutdown bool
 }
 
@@ -21,7 +21,6 @@ func (daemon *recurringTaskDaemon) Run() error {
 	return Continue
 }
 
-
 func (daemon *recurringTaskDaemon) Shutdown() error {
 	daemon.shutdown = true
 	daemon.engine.recurringTaskScheduler.NoOp()
@@ -29,16 +28,16 @@ func (daemon *recurringTaskDaemon) Shutdown() error {
 }
 
 type engineImpl struct {
-	logger          *log.Logger
-	opener          Opener
+	logger                   *log.Logger
+	opener                   Opener
 	lineParserPluginRegistry LineParserPluginRegistry
-	randSource	rand.Source
-	scorekeeper     *Scorekeeper
-	defaultPort     Port
-	spawner         *Spawner
-	pluginInstances []PluginInstance
-	taskRunner      task.TaskRunner
-	recurringTaskScheduler *task.RecurringTaskScheduler
+	randSource               rand.Source
+	scorekeeper              *Scorekeeper
+	defaultPort              Port
+	spawner                  *Spawner
+	pluginInstances          []PluginInstance
+	taskRunner               task.TaskRunner
+	recurringTaskScheduler   *task.RecurringTaskScheduler
 }
 
 func (engine *engineImpl) Logger() *log.Logger {
@@ -117,23 +116,23 @@ func (engine *engineImpl) Start() error {
 }
 
 func NewEngine(logger *log.Logger, opener Opener, lineParserPluginRegistry LineParserPluginRegistry, scorekeeper *Scorekeeper, defaultPort Port) *engineImpl {
-	taskRunner := &task.SimpleTaskRunner {}
+	taskRunner := &task.SimpleTaskRunner{}
 	recurringTaskScheduler := task.NewRecurringTaskScheduler(
-		func () time.Time { return time.Now() },
+		func() time.Time { return time.Now() },
 		taskRunner,
 	)
 	engine := &engineImpl{
-		logger:          logger,
-		opener:          opener,
+		logger: logger,
+		opener: opener,
 		lineParserPluginRegistry: lineParserPluginRegistry,
-		randSource:      NewRandSourceWithTimestampSeed(),
-		scorekeeper:     scorekeeper,
-		defaultPort:     defaultPort,
-		spawner:         NewSpawner(),
-		pluginInstances: make([]PluginInstance, 0),
-		taskRunner:      taskRunner,
-		recurringTaskScheduler: recurringTaskScheduler,
+		randSource:               NewRandSourceWithTimestampSeed(),
+		scorekeeper:              scorekeeper,
+		defaultPort:              defaultPort,
+		spawner:                  NewSpawner(),
+		pluginInstances:          make([]PluginInstance, 0),
+		taskRunner:               taskRunner,
+		recurringTaskScheduler:   recurringTaskScheduler,
 	}
-	engine.Spawn(&recurringTaskDaemon { engine, false })
+	engine.Spawn(&recurringTaskDaemon{engine, false})
 	return engine
 }

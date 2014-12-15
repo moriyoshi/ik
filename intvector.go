@@ -13,8 +13,8 @@ func (sv *IntVector) Push(v int) {
 }
 
 func (sv *IntVector) Pop() int {
-	retval := (*sv)[len(*sv) - 1]
-	*sv = (*sv)[0:len(*sv) - 1]
+	retval := (*sv)[len(*sv)-1]
+	*sv = (*sv)[0 : len(*sv)-1]
 	return retval
 }
 
@@ -25,7 +25,7 @@ func (sv *IntVector) Shift() int {
 }
 
 func (sv *IntVector) Last() int {
-	return (*sv)[len(*sv) - 1]
+	return (*sv)[len(*sv)-1]
 }
 
 func (sv *IntVector) First() int {
