@@ -3,14 +3,13 @@ package plugins
 import (
 	"fmt"
 	"github.com/moriyoshi/ik"
-	"log"
 	"os"
 	"time"
 )
 
 type StdoutOutput struct {
 	factory *StdoutOutputFactory
-	logger  *log.Logger
+	logger  ik.Logger
 }
 
 func (output *StdoutOutput) Emit(recordSets []ik.FluentRecordSet) error {
@@ -42,7 +41,7 @@ func (output *StdoutOutput) Dispose() {
 type StdoutOutputFactory struct {
 }
 
-func newStdoutOutput(factory *StdoutOutputFactory, logger *log.Logger) (*StdoutOutput, error) {
+func newStdoutOutput(factory *StdoutOutputFactory, logger ik.Logger) (*StdoutOutput, error) {
 	return &StdoutOutput{
 		factory: factory,
 		logger:  logger,

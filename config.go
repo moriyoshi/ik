@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"net/url"
 	"path"
@@ -242,7 +241,7 @@ func ParseConfig(opener Opener, filename string) (*Config, error) {
 }
 
 type FluentConfigurer struct {
-	logger                *log.Logger
+	logger                Logger
 	router                *FluentRouter
 	inputFactoryRegistry  InputFactoryRegistry
 	outputFactoryRegistry OutputFactoryRegistry
@@ -265,7 +264,7 @@ func (configurer *FluentConfigurer) Configure(engine Engine, config *Config) err
 			if err != nil {
 				return err
 			}
-			configurer.logger.Printf("Input plugin loaded: %s", inputFactory.Name())
+			configurer.logger.Info("Input plugin loaded: %s", inputFactory.Name())
 		case "match":
 			type_ := v.Attrs["type"]
 			outputFactory := configurer.outputFactoryRegistry.LookupOutputFactory(type_)
@@ -281,13 +280,13 @@ func (configurer *FluentConfigurer) Configure(engine Engine, config *Config) err
 			if err != nil {
 				return err
 			}
-			configurer.logger.Printf("Output plugin loaded: %s, with Args '%s'", outputFactory.Name(), v.Args)
+			configurer.logger.Info("Output plugin loaded: %s, with Args '%s'", outputFactory.Name(), v.Args)
 		}
 	}
 	return nil
 }
 
-func NewFluentConfigurer(logger *log.Logger, inputFactoryRegistry InputFactoryRegistry, outputFactoryRegistry OutputFactoryRegistry, router *FluentRouter) *FluentConfigurer {
+func NewFluentConfigurer(logger Logger, inputFactoryRegistry InputFactoryRegistry, outputFactoryRegistry OutputFactoryRegistry, router *FluentRouter) *FluentConfigurer {
 	return &FluentConfigurer{
 		logger:                logger,
 		router:                router,

@@ -8,8 +8,8 @@ import (
 	termutil "github.com/andrew-d/go-termutil"
 	"github.com/moriyoshi/ik"
 	"github.com/moriyoshi/ik/markup"
+	"github.com/op/go-logging"
 	"github.com/ugorji/go/codec"
-	"log"
 	"math"
 	"net"
 	"os"
@@ -88,7 +88,7 @@ func (ikb *IkBench) Submit(conn net.Conn, params *IkBenchParams) error {
 	return err
 }
 
-func (ikb *IkBench) Run(logger *log.Logger, params *IkBenchParams) {
+func (ikb *IkBench) Run(logger ik.Logger, params *IkBenchParams) {
 	numberOfRecordsSentAtOnce := params.NumberOfRecordsSentAtOnce
 	numberOfAttempts := params.NumberOfRecordsToSubmit / numberOfRecordsSentAtOnce
 	numberOfAttemptsPerProc := numberOfAttempts / params.Concurrency
@@ -121,10 +121,11 @@ func (ikb *IkBench) Run(logger *log.Logger, params *IkBenchParams) {
 						for {
 							conn, err = net.Dial("tcp", params.Host)
 							if err != nil {
-								logger.Print(err.Error())
+								logger.Error(err.Error())
 								retryCount -= 1
 								if retryCount < 0 {
-									logger.Fatal("retry count exceeded") // FIXME
+									logger.Critical("retry count exceeded") // FIXME
+									break outer
 								}
 								continue
 							}
@@ -143,11 +144,11 @@ func (ikb *IkBench) Run(logger *log.Logger, params *IkBenchParams) {
 							}
 							closeErr := conn.Close()
 							if closeErr != nil {
-								logger.Print(closeErr.Error())
+								logger.Warning(closeErr.Error())
 							}
 							conn = nil
 						}
-						logger.Print(err.Error()) // FIXME
+						logger.Error(err.Error()) // FIXME
 						break outer
 					}
 					now := time.Now()
@@ -319,7 +320,7 @@ func main() {
 	}
 	ikb := NewIkBench()
 	ikb.Run(
-		&log.Logger{},
+		logging.MustGetLogger("ikb"),
 		&IkBenchParams{
 			Host:                      host,
 			Simple:                    simple,

@@ -4,7 +4,6 @@ import (
 	"errors"
 	"github.com/moriyoshi/ik"
 	"github.com/pbnjay/strptime"
-	"log"
 	"regexp"
 	"time"
 )
@@ -13,7 +12,7 @@ type RegexpLineParserPlugin struct{}
 
 type RegexpLineParserFactory struct {
 	plugin     *RegexpLineParserPlugin
-	logger     *log.Logger
+	logger     ik.Logger
 	timeParser func(value string) (time.Time, error)
 	regex      *regexp.Regexp
 }
@@ -28,7 +27,7 @@ func (parser *RegexpLineParser) Feed(line string) error {
 	g := regex.FindStringSubmatch(line)
 	data := make(map[string]interface{})
 	if g == nil {
-		parser.factory.logger.Println("Unparsed line: " + line)
+		parser.factory.logger.Error("Unparsed line: " + line)
 		return nil
 	}
 	for i, name := range regex.SubexpNames() {
@@ -59,7 +58,7 @@ func (plugin *RegexpLineParserPlugin) OnRegistering(visitor func(name string, fa
 	})
 }
 
-func (plugin *RegexpLineParserPlugin) newRegexpLineParserFactory(logger *log.Logger, timeParser func(value string) (time.Time, error), regex *regexp.Regexp) (*RegexpLineParserFactory, error) {
+func (plugin *RegexpLineParserPlugin) newRegexpLineParserFactory(logger ik.Logger, timeParser func(value string) (time.Time, error), regex *regexp.Regexp) (*RegexpLineParserFactory, error) {
 	return &RegexpLineParserFactory{
 		plugin:     plugin,
 		logger:     logger,

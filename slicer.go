@@ -1,7 +1,6 @@
 package ik
 
 import (
-	"log"
 	"sync"
 	"unsafe"
 )
@@ -12,7 +11,7 @@ type Slicer struct {
 	journalGroup         JournalGroup
 	keyGetter            func(record FluentRecord) string
 	packer               RecordPacker
-	logger               *log.Logger
+	logger               Logger
 	keys                 map[string]bool
 	newKeyEventListeners map[uintptr]SlicerNewKeyEventListener
 	mtx                  sync.Mutex
@@ -23,7 +22,7 @@ func (slicer *Slicer) notifySlicerNewKeyEventListeners(last Journal, next Journa
 	for _, listener := range slicer.newKeyEventListeners {
 		err := listener(last, next)
 		if err != nil {
-			slicer.logger.Printf("error occurred during notifying flush event: %s", err.Error())
+			slicer.logger.Error("error occurred during notifying flush event: %s", err.Error())
 		}
 	}
 }
@@ -73,7 +72,7 @@ func (slicer *Slicer) Emit(recordSets []FluentRecordSet) error {
 	return nil
 }
 
-func NewSlicer(journalGroup JournalGroup, keyGetter func(record FluentRecord) string, packer RecordPacker, logger *log.Logger) *Slicer {
+func NewSlicer(journalGroup JournalGroup, keyGetter func(record FluentRecord) string, packer RecordPacker, logger Logger) *Slicer {
 	keys := make(map[string]bool)
 	for _, key := range journalGroup.GetJournalKeys() {
 		keys[key] = true

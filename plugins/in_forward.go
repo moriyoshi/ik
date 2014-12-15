@@ -6,7 +6,6 @@ import (
 	"github.com/moriyoshi/ik"
 	"github.com/ugorji/go/codec"
 	"io"
-	"log"
 	"net"
 	"reflect"
 	"strconv"
@@ -15,7 +14,7 @@ import (
 
 type forwardClient struct {
 	input  *ForwardInput
-	logger *log.Logger
+	logger ik.Logger
 	conn   net.Conn
 	codec  *codec.MsgpackHandle
 	enc    *codec.Encoder
@@ -25,7 +24,7 @@ type forwardClient struct {
 type ForwardInput struct {
 	factory  *ForwardInputFactory
 	port     ik.Port
-	logger   *log.Logger
+	logger   ik.Logger
 	bind     string
 	listener net.Listener
 	codec    *codec.MsgpackHandle
@@ -159,7 +158,7 @@ func handleInner(c *forwardClient) bool {
 		if len(recordSets) > 0 {
 			err_ := c.input.Port().Emit(recordSets)
 			if err_ != nil {
-				c.logger.Print(err_.Error())
+				c.logger.Error("%s", err_.Error())
 			}
 		}
 	}()
@@ -170,14 +169,14 @@ func handleInner(c *forwardClient) bool {
 	err_, ok := err.(net.Error)
 	if ok {
 		if err_.Temporary() {
-			c.logger.Println("Temporary failure: %s", err_.Error())
+			c.logger.Warning("Temporary failure: %s", err_.Error())
 			return true
 		}
 	}
 	if err == io.EOF {
-		c.logger.Printf("Client %s closed the connection", c.conn.RemoteAddr().String())
+		c.logger.Info("Client %s closed the connection", c.conn.RemoteAddr().String())
 	} else {
-		c.logger.Print(err.Error())
+		c.logger.Error("%s", err.Error())
 	}
 	return false
 }
@@ -187,12 +186,12 @@ func (c *forwardClient) handle() {
 	}
 	err := c.conn.Close()
 	if err != nil {
-		c.logger.Print(err.Error())
+		c.logger.Warning("%s", err.Error())
 	}
 	c.input.markDischarged(c)
 }
 
-func newForwardClient(input *ForwardInput, logger *log.Logger, conn net.Conn, _codec *codec.MsgpackHandle) *forwardClient {
+func newForwardClient(input *ForwardInput, logger ik.Logger, conn net.Conn, _codec *codec.MsgpackHandle) *forwardClient {
 	c := &forwardClient{
 		input:  input,
 		logger: logger,
@@ -216,7 +215,7 @@ func (input *ForwardInput) Port() ik.Port {
 func (input *ForwardInput) Run() error {
 	conn, err := input.listener.Accept()
 	if err != nil {
-		input.logger.Print(err.Error())
+		input.logger.Warning("%s", err.Error())
 		return err
 	}
 	go newForwardClient(input, input.logger, conn, input.codec).handle()
@@ -227,7 +226,7 @@ func (input *ForwardInput) Shutdown() error {
 	for conn, _ := range input.clients {
 		err := conn.Close()
 		if err != nil {
-			input.logger.Printf("Error during closing connection: %s", err.Error())
+			input.logger.Warning("Error during closing connection: %s", err.Error())
 		}
 	}
 	return input.listener.Close()
@@ -245,13 +244,13 @@ func (input *ForwardInput) markDischarged(c *forwardClient) {
 	delete(input.clients, c.conn)
 }
 
-func newForwardInput(factory *ForwardInputFactory, logger *log.Logger, engine ik.Engine, bind string, port ik.Port) (*ForwardInput, error) {
+func newForwardInput(factory *ForwardInputFactory, logger ik.Logger, engine ik.Engine, bind string, port ik.Port) (*ForwardInput, error) {
 	_codec := codec.MsgpackHandle{}
 	_codec.MapType = reflect.TypeOf(map[string]interface{}(nil))
 	_codec.RawToString = false
 	listener, err := net.Listen("tcp", bind)
 	if err != nil {
-		logger.Print(err.Error())
+		logger.Warning("%s", err.Error())
 		return nil, err
 	}
 	return &ForwardInput{

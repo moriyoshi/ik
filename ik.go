@@ -3,7 +3,6 @@ package ik
 import (
 	"github.com/moriyoshi/ik/task"
 	"io"
-	"log"
 	"math/rand"
 	"net/http"
 )
@@ -101,7 +100,7 @@ type Opener interface {
 
 type Engine interface {
 	Disposable
-	Logger() *log.Logger
+	Logger() Logger
 	Opener() Opener
 	LineParserPluginRegistry() LineParserPluginRegistry
 	RandSource() rand.Source
@@ -198,4 +197,13 @@ type LineParserPlugin interface {
 type LineParserPluginRegistry interface {
 	RegisterLineParserPlugin(plugin LineParserPlugin) error
 	LookupLineParserFactoryFactory(name string) LineParserFactoryFactory
+}
+
+type Logger interface {
+	Critical(format string, args ...interface{})
+	Error(format string, args ...interface{})
+	Warning(format string, args ...interface{})
+	Notice(format string, args ...interface{})
+	Info(format string, args ...interface{})
+	Debug(format string, args ...interface{})
 }

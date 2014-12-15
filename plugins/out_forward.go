@@ -2,9 +2,10 @@ package plugins
 
 import (
 	"bytes"
+	"errors"
+	"fmt"
 	"github.com/moriyoshi/ik"
 	"github.com/ugorji/go/codec"
-	"log"
 	"net"
 	"reflect"
 	"strconv"
@@ -13,7 +14,7 @@ import (
 
 type ForwardOutput struct {
 	factory *ForwardOutputFactory
-	logger  *log.Logger
+	logger  ik.Logger
 	codec   *codec.MsgpackHandle
 	bind    string
 	enc     *codec.Encoder
@@ -49,7 +50,7 @@ func (output *ForwardOutput) flush() error {
 	if output.conn == nil {
 		conn, err := net.Dial("tcp", output.bind)
 		if err != nil {
-			output.logger.Printf("%#v", err.Error())
+			output.logger.Error("%#v", err.Error())
 			return err
 		} else {
 			output.conn = conn
@@ -57,12 +58,12 @@ func (output *ForwardOutput) flush() error {
 	}
 	n, err := output.buffer.WriteTo(output.conn)
 	if err != nil {
-		output.logger.Printf("Write failed. size: %d, buf size: %d, error: %#v", n, output.buffer.Len(), err.Error())
+		output.logger.Error("Write failed. size: %d, buf size: %d, error: %#v", n, output.buffer.Len(), err.Error())
 		output.conn = nil
 		return err
 	}
 	if n > 0 {
-		output.logger.Printf("Forwarded: %d bytes (left: %d bytes)\n", n, output.buffer.Len())
+		output.logger.Notice("Forwarded: %d bytes (left: %d bytes)\n", n, output.buffer.Len())
 	}
 	output.conn.Close()
 	output.conn = nil
@@ -85,7 +86,7 @@ func (output *ForwardOutput) Emit(recordSet []ik.FluentRecordSet) error {
 	for _, recordSet := range recordSet {
 		err := output.encodeRecordSet(recordSet)
 		if err != nil {
-			output.logger.Printf("%#v", err)
+			output.logger.Error("%#v", err)
 			return err
 		}
 	}
@@ -108,7 +109,7 @@ func (output *ForwardOutput) Shutdown() error {
 type ForwardOutputFactory struct {
 }
 
-func newForwardOutput(factory *ForwardOutputFactory, logger *log.Logger, bind string) (*ForwardOutput, error) {
+func newForwardOutput(factory *ForwardOutputFactory, logger ik.Logger, bind string) (*ForwardOutput, error) {
 	_codec := codec.MsgpackHandle{}
 	_codec.MapType = reflect.TypeOf(map[string]interface{}(nil))
 	_codec.RawToString = false
@@ -140,8 +141,7 @@ func (factory *ForwardOutputFactory) New(engine ik.Engine, config *ik.ConfigElem
 	}
 	flush_interval, err := strconv.Atoi(flush_interval_str)
 	if err != nil {
-		engine.Logger().Print(err.Error())
-		return nil, err
+		return nil, errors.New(fmt.Sprintf("Failed to parse flush_interval_str: #v", err))
 	}
 	bind := host + ":" + netPort
 	output, err := newForwardOutput(factory, engine.Logger(), bind)

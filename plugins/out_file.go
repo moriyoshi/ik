@@ -9,7 +9,6 @@ import (
 	"github.com/moriyoshi/ik"
 	jnl "github.com/moriyoshi/ik/journal"
 	"io"
-	"log"
 	"math/rand"
 	"os"
 	"path"
@@ -20,7 +19,7 @@ import (
 
 type FileOutput struct {
 	factory           *FileOutputFactory
-	logger            *log.Logger
+	logger            ik.Logger
 	pathPrefix        string
 	pathSuffix        string
 	symlinkPath       string
@@ -196,7 +195,7 @@ func (output *FileOutput) attachListeners(journal ik.Journal) {
 				err = os.Symlink(output.symlinkPath, wrapper.Path())
 			}
 			if err != nil {
-				output.logger.Print("Failed to create symbolic link " + output.symlinkPath)
+				output.logger.Error("Failed to create symbolic link %s", output.symlinkPath)
 			}
 			return err
 		})
@@ -208,7 +207,7 @@ func (output *FileOutput) attachListeners(journal ik.Journal) {
 	})
 }
 
-func newFileOutput(factory *FileOutputFactory, logger *log.Logger, randSource rand.Source, pathPrefix string, pathSuffix string, timeFormat string, compressionFormat int, symlinkPath string, permission os.FileMode, bufferChunkLimit int64, timeSliceFormat string, disableDraining bool) (*FileOutput, error) {
+func newFileOutput(factory *FileOutputFactory, logger ik.Logger, randSource rand.Source, pathPrefix string, pathSuffix string, timeFormat string, compressionFormat int, symlinkPath string, permission os.FileMode, bufferChunkLimit int64, timeSliceFormat string, disableDraining bool) (*FileOutput, error) {
 	if timeSliceFormat == "" {
 		timeSliceFormat = "%Y%m%d"
 	}

@@ -2,7 +2,6 @@ package ik
 
 import (
 	"github.com/moriyoshi/ik/task"
-	"log"
 	"math/rand"
 	"time"
 )
@@ -28,7 +27,7 @@ func (daemon *recurringTaskDaemon) Shutdown() error {
 }
 
 type engineImpl struct {
-	logger                   *log.Logger
+	logger                   Logger
 	opener                   Opener
 	lineParserPluginRegistry LineParserPluginRegistry
 	randSource               rand.Source
@@ -40,7 +39,7 @@ type engineImpl struct {
 	recurringTaskScheduler   *task.RecurringTaskScheduler
 }
 
-func (engine *engineImpl) Logger() *log.Logger {
+func (engine *engineImpl) Logger() Logger {
 	return engine.logger
 }
 
@@ -115,7 +114,7 @@ func (engine *engineImpl) Start() error {
 	return engine.spawner.PollMultiple(spawnees)
 }
 
-func NewEngine(logger *log.Logger, opener Opener, lineParserPluginRegistry LineParserPluginRegistry, scorekeeper *Scorekeeper, defaultPort Port) *engineImpl {
+func NewEngine(logger Logger, opener Opener, lineParserPluginRegistry LineParserPluginRegistry, scorekeeper *Scorekeeper, defaultPort Port) *engineImpl {
 	taskRunner := &task.SimpleTaskRunner{}
 	recurringTaskScheduler := task.NewRecurringTaskScheduler(
 		func() time.Time { return time.Now() },

@@ -7,7 +7,7 @@ import (
 	"github.com/moriyoshi/ik"
 	"github.com/moriyoshi/ik/parsers"
 	"github.com/moriyoshi/ik/plugins"
-	"log"
+	"github.com/op/go-logging"
 	"os"
 	"path"
 )
@@ -18,7 +18,7 @@ func usage() {
 	os.Exit(255)
 }
 
-func configureScoreboards(logger *log.Logger, registry *MultiFactoryRegistry, engine ik.Engine, config *ik.Config) error {
+func configureScoreboards(logger ik.Logger, registry *MultiFactoryRegistry, engine ik.Engine, config *ik.Config) error {
 	for _, v := range config.Root.Elems {
 		switch v.Name {
 		case "scoreboard":
@@ -35,14 +35,14 @@ func configureScoreboards(logger *log.Logger, registry *MultiFactoryRegistry, en
 			if err != nil {
 				return err
 			}
-			logger.Printf("Scoreboard plugin loaded: %s", scoreboardFactory.Name())
+			logger.Info("Scoreboard plugin loaded: %s", scoreboardFactory.Name())
 		}
 	}
 	return nil
 }
 
 func main() {
-	logger := log.New(os.Stdout, "[ik] ", log.Lmicroseconds)
+	logger := logging.MustGetLogger("ik")
 
 	var config_file string
 	var help bool
@@ -86,7 +86,7 @@ func main() {
 	defer func() {
 		err := engine.Dispose()
 		if err != nil {
-			engine.Logger().Println(err.Error())
+			engine.Logger().Error("%s", err.Error())
 		}
 	}()
 

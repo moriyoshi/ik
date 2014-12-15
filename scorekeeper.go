@@ -3,11 +3,10 @@ package ik
 import (
 	"errors"
 	"fmt"
-	"log"
 )
 
 type Scorekeeper struct {
-	logger *log.Logger
+	logger Logger
 	topics map[Plugin]map[string]ScorekeeperTopic
 }
 
@@ -36,7 +35,7 @@ func (sk *Scorekeeper) GetTopics(plugin Plugin) []ScorekeeperTopic {
 }
 
 func (sk *Scorekeeper) AddTopic(topic ScorekeeperTopic) {
-	sk.logger.Printf("AddTopic: plugin=%s, name=%s", topic.Plugin.Name(), topic.Name)
+	sk.logger.Info("AddTopic: plugin=%s, name=%s", topic.Plugin.Name(), topic.Name)
 	entries, ok := sk.topics[topic.Plugin]
 	if !ok {
 		entries = make(map[string]ScorekeeperTopic)
@@ -61,7 +60,7 @@ func (sk *Scorekeeper) Fetch(plugin Plugin, name string) (ScoreValueFetcher, err
 
 func (sk *Scorekeeper) Dispose() {}
 
-func NewScorekeeper(logger *log.Logger) *Scorekeeper {
+func NewScorekeeper(logger Logger) *Scorekeeper {
 	return &Scorekeeper{
 		logger: logger,
 		topics: make(map[Plugin]map[string]ScorekeeperTopic),

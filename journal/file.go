@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"github.com/moriyoshi/ik"
 	"io"
-	"log"
 	"math/rand"
 	"os"
 	"path"
@@ -53,7 +52,7 @@ type FileJournalGroup struct {
 	factory        *FileJournalGroupFactory
 	pluginInstance ik.PluginInstance
 	timeGetter     func() time.Time
-	logger         *log.Logger
+	logger         ik.Logger
 	rand           *rand.Rand
 	fileMode       os.FileMode
 	maxSize        int64
@@ -64,7 +63,7 @@ type FileJournalGroup struct {
 }
 
 type FileJournalGroupFactory struct {
-	logger            *log.Logger
+	logger            ik.Logger
 	paths             map[string]*FileJournalGroup
 	randSource        rand.Source
 	timeGetter        func() time.Time
@@ -199,7 +198,7 @@ func (journal *FileJournal) notifyFlushListeners(chunk *FileJournalChunk) {
 	for _, listener := range journal.flushListeners {
 		err := listener(journal.newChunkWrapper(chunk))
 		if err != nil {
-			journal.group.logger.Printf("error occurred during notifying flush event: %s", err.Error())
+			journal.group.logger.Error("error occurred during notifying flush event: %s", err.Error())
 		}
 	}
 }
@@ -209,7 +208,7 @@ func (journal *FileJournal) notifyNewChunkListeners(chunk *FileJournalChunk) {
 	for _, listener := range journal.newChunkListeners {
 		err := listener(journal.newChunkWrapper(chunk))
 		if err != nil {
-			journal.group.logger.Printf("error occurred during notifying flush event: %s", err.Error())
+			journal.group.logger.Error("error occurred during notifying flush event: %s", err.Error())
 		}
 	}
 }
@@ -550,7 +549,7 @@ func validateChunks(chunks *FileJournalChunkDequeue) error {
 	return nil
 }
 
-func scanJournals(logger *log.Logger, pathPrefix string, pathSuffix string) (map[string]*FileJournal, error) {
+func scanJournals(logger ik.Logger, pathPrefix string, pathSuffix string) (map[string]*FileJournal, error) {
 	journals := make(map[string]*FileJournal)
 	dirname, basename := path.Split(pathPrefix)
 	if dirname == "" {
@@ -581,7 +580,7 @@ func scanJournals(logger *log.Logger, pathPrefix string, pathSuffix string) (map
 			variablePortion := file[len(basename) : len(file)-len(pathSuffix)]
 			info, err := DecodeJournalPath(variablePortion)
 			if err != nil {
-				logger.Printf("warning: unexpected file under the designated directory space (%s) - %s", dirname, file)
+				logger.Warning("warning: unexpected file under the designated directory space (%s) - %s", dirname, file)
 				continue
 			}
 			journalProto, ok := journals[info.Key]
@@ -685,13 +684,13 @@ func (factory *FileJournalGroupFactory) GetJournalGroup(path string, pluginInsta
 		journal.writer = file
 		journal.position = position
 	}
-	factory.logger.Printf("Path %s is designated to PluginInstance %s", path, pluginInstance.Factory().Name())
+	factory.logger.Info("Path %s is designated to PluginInstance %s", path, pluginInstance.Factory().Name())
 	factory.paths[path] = journalGroup
 	return journalGroup, nil
 }
 
 func NewFileJournalGroupFactory(
-	logger *log.Logger,
+	logger ik.Logger,
 	randSource rand.Source,
 	timeGetter func() time.Time,
 	defaultPathSuffix string,

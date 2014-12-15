@@ -9,7 +9,6 @@ import (
 	fileid "github.com/moriyoshi/go-fileid"
 	"github.com/moriyoshi/ik"
 	"io"
-	"log"
 	"net/http"
 	"os"
 	"reflect"
@@ -135,7 +134,7 @@ type TailTarget struct {
 }
 
 type TailEventHandler struct {
-	logger         *log.Logger
+	logger         ik.Logger
 	path           string
 	rotateWait     time.Duration
 	target         TailTarget
@@ -220,15 +219,15 @@ func (handler *TailEventHandler) fetch() error {
 				if line == nil {
 					panic("WTF?")
 				}
-				handler.logger.Printf("the file was not terminated by line endings and the file seems to have been rotated: %s, position=%d", handler.target.path, handler.bf.position)
+				handler.logger.Warning("the file was not terminated by line endings and the file seems to have been rotated: %s, position=%d", handler.target.path, handler.bf.position)
 			}
 		}
 		if ispfx {
-			handler.logger.Printf("line too long: %s, position=%d", handler.target.path, handler.bf.position)
+			handler.logger.Warning("line too long: %s, position=%d", handler.target.path, handler.bf.position)
 		}
 		stringizedLine, err := handler.decode(line)
 		if err != nil {
-			handler.logger.Printf("failed to decode line")
+			handler.logger.Error("failed to decode line")
 			stringizedLine = hex.Dump(line)
 		}
 		err = handler.lineReceiver(stringizedLine)
@@ -297,7 +296,7 @@ func (handler *TailEventHandler) OnChange(now time.Time) error {
 				if err != nil {
 					return err
 				}
-				handler.logger.Println("rotation detected: " + target.path)
+				handler.logger.Notice("rotation detected: %s", target.path)
 				handler.pending = true
 				handler.expiry = now.Add(handler.rotateWait)
 			} else {
@@ -305,10 +304,10 @@ func (handler *TailEventHandler) OnChange(now time.Time) error {
 			}
 		} else if handler.target.f == nil && target.f != nil {
 			// file was newly created
-			handler.logger.Println("file created: " + target.path)
+			handler.logger.Notice("file created: %s", target.path)
 		} else if handler.target.f != nil && target.f == nil {
 			// file was moved?
-			handler.logger.Println("file moved: " + target.path)
+			handler.logger.Notice("file moved: %s", target.path)
 			target, err = (&handler.target).UpdatedOne()
 			if err != nil {
 				return err
@@ -356,7 +355,7 @@ func (handler *TailEventHandler) OnChange(now time.Time) error {
 }
 
 func NewTailEventHandler(
-	logger *log.Logger,
+	logger ik.Logger,
 	target TailTarget,
 	position int64,
 	rotateWait time.Duration,
@@ -376,7 +375,7 @@ func NewTailEventHandler(
 		bf = NewMyBufferedReader(target.f, readBufferSize, position)
 		target.size = position
 	} else {
-		logger.Println("file does not exist: " + target.path)
+		logger.Error("file does not exist: %s", target.path)
 	}
 	return &TailEventHandler{
 		logger:         logger,
@@ -420,7 +419,7 @@ type TailPositionFileEntry struct {
 }
 
 type TailPositionFile struct {
-	logger      *log.Logger
+	logger      ik.Logger
 	refcount    int64
 	path        string
 	f           *os.File
@@ -673,16 +672,16 @@ func (positionFile *TailPositionFile) doUpdate() {
 		}
 		_, err := positionFile.f.Seek(0, os.SEEK_SET)
 		if err != nil {
-			positionFile.logger.Println(err.Error())
+			positionFile.logger.Error("%s", err.Error())
 			continue
 		}
 		n, err := positionFile.f.Write(positionFile.view)
 		if err != nil {
-			positionFile.logger.Println(err.Error())
+			positionFile.logger.Error("%s", err.Error())
 			continue
 		}
 		if n != len(positionFile.view) {
-			positionFile.logger.Println("failed to update position file")
+			positionFile.logger.Error("failed to update position file: %s", positionFile.path)
 			continue
 		}
 	}
@@ -755,7 +754,7 @@ func readTailPositionFileEntries(positionFile *TailPositionFile, f *os.File) (ma
 	return retval, nil
 }
 
-func openPositionFile(logger *log.Logger, path string) (*TailPositionFile, error) {
+func openPositionFile(logger ik.Logger, path string) (*TailPositionFile, error) {
 	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0666) // FIXME
 	failed := true
 	defer func() {
@@ -863,19 +862,19 @@ func (watcher *TailWatcher) Run() error {
 	for {
 		select {
 		case err := <-watcher.statWatcher.Error:
-			watcher.input.logger.Println(err.Error())
+			watcher.input.logger.Error("%s", err.Error())
 		case <-watcher.statWatcher.Event:
 			now := time.Now()
 			err := watcher.handler.OnChange(now)
 			if err != nil {
-				watcher.input.logger.Println(err.Error())
+				watcher.input.logger.Error("%s", err.Error())
 				return err
 			}
 			return ik.Continue
 		case now := <-watcher.timer.C:
 			err := watcher.handler.OnChange(now)
 			if err != nil {
-				watcher.input.logger.Println(err.Error())
+				watcher.input.logger.Error("%s", err.Error())
 				return err
 			}
 			return ik.Continue
@@ -886,7 +885,7 @@ func (watcher *TailWatcher) Run() error {
 			now := time.Now()
 			err := watcher.handler.OnChange(now)
 			if err != nil {
-				watcher.input.logger.Println(err.Error())
+				watcher.input.logger.Error("%s", err.Error())
 				return err
 			}
 			return ik.Continue
@@ -1021,7 +1020,7 @@ type TailInput struct {
 	factory           *TailInputFactory
 	engine            ik.Engine
 	port              ik.Port
-	logger            *log.Logger
+	logger            ik.Logger
 	pathSet           *PathSet
 	tagPrefix         string
 	tagSuffix         string
@@ -1069,7 +1068,7 @@ func (input *TailInput) cleanup() error {
 	}
 	err := (error)(nil)
 	for _, err_ := range errors {
-		input.logger.Println(err_.Error())
+		input.logger.Error("%s", err_.Error())
 		if err == nil && err_ != nil {
 			err = err_
 		}
@@ -1118,23 +1117,23 @@ func (input *TailInput) refreshWatchers() error {
 			added = append(added, watcher)
 		}
 	}
-	input.logger.Println("Refreshing watchers...")
+	input.logger.Info("Refreshing watchers...")
 	for _, watcher := range deleted {
 		delete(input.watchers, watcher.tailFileInfo.Path())
 		watcher.Shutdown()
-		input.logger.Println(fmt.Sprintf("Deleted watcher for %s", watcher.tailFileInfo.Path()))
+		input.logger.Info("Deleted watcher for %s", watcher.tailFileInfo.Path())
 	}
 	failed = false
 	for _, watcher := range added {
 		input.watchers[watcher.tailFileInfo.Path()] = watcher
-		input.logger.Println(fmt.Sprintf("Added watcher for %s", watcher.tailFileInfo.Path()))
+		input.logger.Info("Added watcher for %s", watcher.tailFileInfo.Path())
 	}
 	return nil
 }
 
 func newTailInput(
 	factory *TailInputFactory,
-	logger *log.Logger,
+	logger ik.Logger,
 	engine ik.Engine,
 	port ik.Port,
 	pathSet *PathSet,

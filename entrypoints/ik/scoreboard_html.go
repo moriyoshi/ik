@@ -7,7 +7,6 @@ import (
 	"github.com/moriyoshi/ik/markup"
 	"html"
 	"html/template"
-	"log"
 	"net"
 	"net/http"
 	"reflect"
@@ -180,7 +179,7 @@ No topics available
 type HTMLHTTPScoreboard struct {
 	template *template.Template
 	factory  *HTMLHTTPScoreboardFactory
-	logger   *log.Logger
+	logger   ik.Logger
 	engine   ik.Engine
 	registry ik.PluginRegistry
 	listener net.Listener
@@ -342,7 +341,7 @@ func (scoreboard *HTMLHTTPScoreboard) ServeHTTP(resp http.ResponseWriter, req *h
 			topics[i].Value, err = topic_.Fetcher.Markup(pluginInstance)
 			if err != nil {
 				errorMessage := err.Error()
-				scoreboard.logger.Print(errorMessage)
+				scoreboard.logger.Error("%s", errorMessage)
 				topics[i].Value = ik.Markup{[]ik.MarkupChunk{{Attrs: ik.Embolden, Text: fmt.Sprintf("Error: %s", errorMessage)}}}
 			}
 		}
@@ -372,7 +371,7 @@ func (scoreboard *HTMLHTTPScoreboard) ServeHTTP(resp http.ResponseWriter, req *h
 	})
 }
 
-func newHTMLHTTPScoreboard(factory *HTMLHTTPScoreboardFactory, logger *log.Logger, engine ik.Engine, registry ik.PluginRegistry, bind string, readTimeout time.Duration, writeTimeout time.Duration) (*HTMLHTTPScoreboard, error) {
+func newHTMLHTTPScoreboard(factory *HTMLHTTPScoreboardFactory, logger ik.Logger, engine ik.Engine, registry ik.PluginRegistry, bind string, readTimeout time.Duration, writeTimeout time.Duration) (*HTMLHTTPScoreboard, error) {
 	template_, err := template.New("main").Funcs(template.FuncMap{
 		"spawneeName":           spawneeName,
 		"renderExitStatusStyle": renderExitStatusStyle,
@@ -382,7 +381,7 @@ func newHTMLHTTPScoreboard(factory *HTMLHTTPScoreboardFactory, logger *log.Logge
 		"renderPluginType":      renderPluginType,
 	}).Parse(mainTemplate)
 	if err != nil {
-		logger.Print(err.Error())
+		logger.Error("%s", err.Error())
 		return nil, err
 	}
 	server := http.Server{
@@ -396,7 +395,7 @@ func newHTMLHTTPScoreboard(factory *HTMLHTTPScoreboardFactory, logger *log.Logge
 	}
 	listener, err := net.Listen("tcp", bind)
 	if err != nil {
-		logger.Print(err.Error())
+		logger.Error("%s", err.Error())
 		return nil, err
 	}
 	retval := &HTMLHTTPScoreboard{
