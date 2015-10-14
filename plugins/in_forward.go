@@ -63,7 +63,7 @@ func decodeRecordSet(tag []byte, entries []interface{}) (ik.FluentRecordSet, err
 		}
 		data, ok := entry[1].(map[string]interface{})
 		if !ok {
-			return ik.FluentRecordSet{}, errors.New("Failed to decode data field")
+			return ik.FluentRecordSet{}, errors.New(fmt.Sprintf("Failed to decode data field", entry[1]))
 		}
 		coerceInPlace(data)
 		records[i] = ik.TinyFluentRecord{
@@ -94,7 +94,7 @@ func (c *forwardClient) decodeEntries() ([]ik.FluentRecordSet, error) {
 		timestamp := timestamp_or_entries
 		data, ok := v[2].(map[string]interface{})
 		if !ok {
-			return nil, errors.New("Failed to decode data field")
+			return nil, errors.New(fmt.Sprintf("Failed to decode data field (got %t)", v[2]))
 		}
 		coerceInPlace(data)
 		retval = []ik.FluentRecordSet{
@@ -112,7 +112,7 @@ func (c *forwardClient) decodeEntries() ([]ik.FluentRecordSet, error) {
 		timestamp := uint64(timestamp_or_entries)
 		data, ok := v[2].(map[string]interface{})
 		if !ok {
-			return nil, errors.New("Failed to decode data field")
+			return nil, errors.New(fmt.Sprintf("Failed to decode data field (got %t)", v[2]))
 		}
 		retval = []ik.FluentRecordSet{
 			{
